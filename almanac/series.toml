@@ -52,7 +52,7 @@ url = "https://eservices.mas.gov.sg/apimg-gw/server/monthly_statistical_bulletin
 # stored ONLY as the GitHub Actions secret named below and sent in `auth_header`.
 secret = "MAS_API_KEY"
 auth_header = "KeyId"
-note = "keyless routes are gone (legacy datastore API returns HTML; gateway 401 without a key)"
+note = "keyless routes are gone; keyed call returns full history as JSON (~6.8 MB, ~18 s) -- filter by date in the fetcher"
 
 # ---- A. Curve & credit -------------------------------------------------------
 [[series]]
@@ -160,11 +160,11 @@ redistribution = "open"
 [[series]]
 id = "SORA"
 source = "mas"
-key = "sora"  # response field name; confirm on the first keyed probe
+key = "sora"  # JSON field; keyed probe 2026-09-28: 200, body mentions sora. Exact field confirmed in step 1
 freq = "daily"
 units = "percent"
 use = "B"
-status = "tbd"  # -> active once the probe returns 200 with secret MAS_API_KEY set
+status = "active"
 redistribution = "open"
 
 # ---- C. Regime ---------------------------------------------------------------
