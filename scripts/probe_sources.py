@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 import time
 import tomllib
@@ -75,6 +76,28 @@ DISCOVER = {"mas?5": "sora", "mas?6": "sora|overnight|interest rate"}
 # Catalog listings that are paged (data.gov.sg v2 ignores ?query=): walk
 # every page, politely, and search the titles.
 PAGED = {"mas?6": 300}
+
+
+# HTML pages whose layout (form controls, download links, table headers) is
+# reported so a fetcher can be designed. Layout only, never cell values.
+STRUCTURE = {"mas?2"}
+
+
+def structure(body: bytes) -> str:
+    html = body.decode("utf-8", "replace")
+    controls = sorted(set(re.findall(r'<(?:select|input|button)[^>]*\bname="([^"]+)"', html, re.I)))
+    links = sorted(set(h for h in re.findall(r'href="([^"]+)"', html, re.I)
+                       if re.search(r"download|csv|xls|export", h, re.I)))
+    headers = [re.sub(r"<[^>]+>|\s+", " ", h).strip()
+               for h in re.findall(r"<th[^>]*>(.*?)</th>", html, re.I | re.S)]
+    return "; ".join([
+        f"tables={len(re.findall(r'<table', html, re.I))}",
+        f"forms={len(re.findall(r'<form', html, re.I))}",
+        f"viewstate={'yes' if '__VIEWSTATE' in html else 'no'}",
+        "controls=" + ", ".join(c for c in controls if not c.startswith("__"))[:600],
+        "links=" + ", ".join(links)[:400],
+        "headers=" + " | ".join(dict.fromkeys(h for h in headers if h))[:600],
+    ])
 
 
 def discover(body: bytes, term: str) -> list[str]:
@@ -144,6 +167,8 @@ def main() -> int:
             continue
         cells, body = probe(url, MARKERS.get(label, ""))
         lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
+        if label in STRUCTURE:
+            catalog.append(f"- {label} layout: {structure(body)}")
         if label in DISCOVER:
             hits = set(discover(body, DISCOVER[label]))
             note = ""
@@ -160,7 +185,7 @@ def main() -> int:
         time.sleep(1)  # one request at a time, politely
     table = "\n".join(lines)
     if catalog:
-        table += "\n\nCatalog matches:\n" + "\n".join(catalog)
+        table += "\n\nDetails (catalog matches, page layouts):\n" + "\n".join(catalog)
     print(table)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
