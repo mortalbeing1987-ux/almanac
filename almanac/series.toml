@@ -71,12 +71,9 @@ auth_param = "UserID"
 url = "TBD"
 candidates = [
   "https://www.bea.gov/data/intl-trade-investment/international-trade-goods-and-services",
-  "https://bea.gov/sites/default/files/2025-01/trad-time-series-1124.xlsx",
+  "https://www.bea.gov/sites/default/files/2026-09/trad0726-time-series.xlsx",
+  "https://www.bea.gov/sites/default/files/2026-09/trad0726-geo-time-series.xlsx",
   "https://www.census.gov/foreign-trade/statistics/historical/gands.xlsx",
-  "https://www.census.gov/foreign-trade/statistics/historical/gands.xls",
-  "https://www.census.gov/foreign-trade/statistics/historical/gands.txt",
-  "https://www.census.gov/foreign-trade/statistics/historical/index.html",
-  "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BOPTEXP",
 ]
 
 [sources.census]

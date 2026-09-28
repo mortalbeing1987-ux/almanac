@@ -106,10 +106,29 @@ def census_rows(body: bytes, pattern: str) -> str:
 # Research pages: list links matching a pattern (hrefs only).
 LINKS = {
     "trade_release?1": r"trad[^\"']*\.(xlsx|pdf)",
-    "trade_release?6": r"gands[^\"']*",
 }
-# CSVs whose latest observation DATE (first column only) is reported.
-LAST_DATE = {"trade_release?7"}
+# XLSX files: report sheet names and the workbook's text labels (shared
+# strings = headers/row names), never numeric cells.
+XLSX_LABELS = {"trade_release?2", "trade_release?3", "trade_release?4"}
+
+
+def xlsx_labels(body: bytes) -> str:
+    import io
+    import zipfile
+    try:
+        z = zipfile.ZipFile(io.BytesIO(body))
+        book = z.read("xl/workbook.xml").decode("utf-8", "replace")
+        sheets = re.findall(r'<sheet [^>]*name="([^"]+)"', book)
+        strings = []
+        if "xl/sharedStrings.xml" in z.namelist():
+            ss = z.read("xl/sharedStrings.xml").decode("utf-8", "replace")
+            strings = [re.sub(r"<[^>]+>", "", s).strip()
+                       for s in re.findall(r"<si>(.*?)</si>", ss, re.S)]
+    except (zipfile.BadZipFile, KeyError) as e:
+        return f"unreadable ({type(e).__name__})"
+    labels = [s for s in dict.fromkeys(strings) if s and not re.fullmatch(r"[\d.,()\s-]+", s)]
+    return (f"{len(sheets)} sheets: " + "; ".join(sheets)[:700]
+            + f" || {len(labels)} labels, first: " + " | ".join(labels[:60])[:1800])
 
 
 # HTML answers where an API was expected: print the page <title> only.
@@ -221,9 +240,8 @@ def main() -> int:
         if label in LINKS:
             hrefs = dict.fromkeys(re.findall(r'href="([^"]*' + LINKS[label] + r')"', body.decode("utf-8", "replace"), re.I))
             details.append(f"- {label} links: " + (", ".join(h if isinstance(h, str) else h[0] for h in hrefs)[:900] or "none"))
-        if label in LAST_DATE and body:
-            last = body.decode("utf-8", "replace").strip().splitlines()[-1].split(",")[0]
-            details.append(f"- {label} latest observation date: {last}")
+        if label in XLSX_LABELS and body:
+            details.append(f"- {label} xlsx: {xlsx_labels(body)}")
         if label in CENSUS_ROWS and cells[3] == "json":
             details.append(f"- {label}: {census_rows(body, CENSUS_ROWS[label])}")
         if label in LISTS:
