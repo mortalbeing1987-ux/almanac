@@ -238,6 +238,9 @@ def xlsx_detail(body: bytes, sheets: list) -> str:
         rows = sorted({r for _, r in cells})
         a = [(r, cells[("A", r)]) for r in rows if ("A", r) in cells and cells[("A", r)] != "#"]
         tail = []
+        periodish = [(r, lab) for r, lab in a if re.match(r"\d{4}", lab)]
+        tail.append("labels after the first 2025/2026 period: " + " | ".join(
+            repr(lab) for r, lab in periodish if lab[:4] in ("2025", "2026"))[:1200])
         for r, lab in a[-8:]:
             nums = "".join(c + "," for (c, rr), v in sorted(cells.items(), key=lambda x: (len(x[0][0]), x[0][0])) if rr == r and v == "#")
             tail.append(f"r{r} {lab!r} numbers in [{nums}]")
