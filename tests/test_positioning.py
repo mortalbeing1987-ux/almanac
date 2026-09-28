@@ -193,7 +193,8 @@ def test_measures_start_from_delivered_ids_not_a_new_backfill():
     assert deliver.since_by_series([cot], st, TODAY)["COT_FX"] == deliver.FULL_HISTORY
     for k in cot["key"]:
         for sid in delivered_ids(cot, k):
-            st.series[sid] = {"last_obs": "2026-09-22", "source": "cftc"}
+            st.series[sid] = {"last_obs": "2026-09-22", "source": "cftc",
+                             "backfilled_from": "full"}
     # weekly look-back (90 days), not a second full backfill
     assert deliver.since_by_series([cot], st, TODAY)["COT_FX"] == date(2026, 6, 24)
 

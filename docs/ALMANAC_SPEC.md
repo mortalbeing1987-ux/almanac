@@ -35,7 +35,11 @@ Home importer (not in this repo) pulls bundles -> its own DB
 - `almanac/sources/<source>.py` — one fetcher per source, returning tidy rows.
 - `almanac/state` — per-series delivery state (last observation delivered,
   last fetch, last error). Kept in the PRIVATE data repo next to the bundles,
-  because it is derived from the data.
+  because it is derived from the data. It also records, per delivered id, the
+  backfill depth fetched (`backfilled_from`): raising a series' `backfill` in
+  the registry makes the next run fetch the older history once (delivered as
+  new rows; values already delivered are dropped as unchanged), and the record
+  is updated only when that source's fetch succeeded.
 - `almanac/freshness.py` — the "gap score": for each series, is it behind its
   expected release schedule (`fresh`), not yet backfilled to source start
   (`depth`), or is the calendar short of the next 60 days (`calendar_ahead`)?

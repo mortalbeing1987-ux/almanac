@@ -43,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
             size = f"  ({parquet.stat().st_size / 1e6:.2f} MB)"
         print(f"rows delivered: {status['rows_delivered']} (revisions: {status['revisions_delivered']})"
               f"  bundle: {status['bundle']}{size}")
+        if status["bundle"]:
+            print("rows by series: " + ", ".join(f"{k} {n}" for k, n in sorted(_rows_by_series(parquet).items())))
         stale = status["freshness"]["stale"]
         print(f"stale series: {len(stale)}{'  ' + ', '.join(stale) if stale else ''}")
         for src, s in sorted(status["calendar_sources"].items()):
@@ -60,6 +62,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{r.source:10s} {r.status:7s} {len(r.observations):6d} obs  {r.reason}")
     print(f"bundle: {path}")
     return 0
+
+
+def _rows_by_series(parquet: Path) -> dict[str, int]:
+    """Row counts per registry series id (counts only, never values)."""
+    import pyarrow.parquet as pq
+    ids = sorted((s["id"] for s in load().series), key=len, reverse=True)
+    out: dict[str, int] = {}
+    for sid in pq.read_table(parquet, columns=["series_id"]).column("series_id").to_pylist():
+        reg_id = next((i for i in ids if sid == i or sid.startswith(i + "_")), sid)
+        out[reg_id] = out.get(reg_id, 0) + 1
+    return out
 
 
 if __name__ == "__main__":

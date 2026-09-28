@@ -14,8 +14,10 @@
 #   max_age_days   freshness limit (default by freq: daily 4, weekly 10, monthly 45, quarterly 120)
 #   lookback_days  revision re-fetch window (default by freq: daily 30, weekly 90,
 #                  monthly 400, quarterly 800)
-#   backfill       first-delivery depth: "full" (everything the source has) or a
-#                  number of days (default 365)
+#   backfill       history depth: "full" (everything the source has) or a number
+#                  of days (default 365). Raising it on a series already delivered
+#                  fetches the older history once; the depth reached is recorded
+#                  per id (state: backfilled_from) after a successful fetch
 #   measures       several values per key: delivered as `<id>_<key>_<measure>`
 #   per_key        per-key overrides of freq / max_age_days / lookback_days, e.g.
 #                  weekly codes inside an otherwise daily series
