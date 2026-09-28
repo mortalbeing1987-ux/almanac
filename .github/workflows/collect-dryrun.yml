@@ -5,6 +5,10 @@ name: collect-dryrun
 # runner's scratch disk and discarded -- never uploaded (this repo is public).
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "almanac/**"
+      - ".github/workflows/collect-dryrun.yml"
 
 permissions:
   contents: read
