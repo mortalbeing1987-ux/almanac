@@ -68,7 +68,8 @@ candidates = [
   "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ParameterName=Frequency&ResultFormat=JSON",
   "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ParameterName=Indicator&ResultFormat=JSON",
   "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ParameterName=AreaOrCountry&ResultFormat=JSON",
-  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Indicator=ExpGdsServ&AreaOrCountry=Korea&Frequency=QSA&Year=2025&ResultFormat=JSON",
+  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Indicator=ExpGdsServ&AreaOrCountry=SouthKorea&Frequency=QSA&Year=2025&ResultFormat=JSON",
+  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Indicator=ImpServ&AreaOrCountry=SouthKorea&Frequency=QSA&Year=2025&ResultFormat=JSON",
 ]
 
 [sources.census]
@@ -78,6 +79,8 @@ url = "TBD"
 candidates = [
   "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO&time=2026-06&CTY_CODE=5800",
   "https://api.census.gov/data/timeseries/intltrade/imports/hs?get=CTY_CODE,CTY_NAME,GEN_VAL_MO&time=2026-06&CTY_CODE=5800",
+  "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO&time=2025-12",
+  "https://api.census.gov/data/timeseries/intltrade/exports/hs.json",
 ]
 
 # ---- A. Curve & credit -------------------------------------------------------

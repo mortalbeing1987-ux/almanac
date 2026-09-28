@@ -65,7 +65,8 @@ MARKERS = {
     "rba": "FIRMMCRTD",
     "mas": "sora",
     "bea?4": "Korea",
-    "bea?5": "DataValue",
+    "bea?5": "Error",
+    "bea?6": "Error",
     "census?1": "5800",
     "census?2": "5800",
 }
@@ -75,9 +76,13 @@ MARKERS = {
 LISTS = {
     "bea?1": ("DatasetName", ""),
     "bea?2": ("Key", ""),
-    "bea?3": ("Key", "Gds|Serv"),
+    "bea?3": ("Key", "^(Exp|Imp|Bal)(Gds|Serv|GdsServ)$"),
     "bea?4": ("Key", "Korea|Taiwan|Vietnam|Singapore|Switzerland|India|China|Japan|Canada|Mexico|Kingdom|Germany|Euro"),
+    "bea?5": ("TimePeriod", ""),
+    "bea?6": ("TimePeriod", ""),
 }
+# HTML answers where an API was expected: print the page <title> only.
+TITLES = {"census?1", "census?2", "census?3", "census?4"}
 
 
 def list_values(body: bytes, field: str, pattern: str) -> str:
@@ -173,6 +178,9 @@ def main() -> int:
             continue
         cells, body = probe(url, MARKERS.get(label, ""), *creds)
         lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
+        if label in TITLES and cells[3] == "html":
+            m = re.search(rb"<title[^>]*>(.*?)</title>", body, re.I | re.S)
+            details.append(f"- {label} page title: {m.group(1).decode('utf-8', 'replace').strip()[:120] if m else 'none'}")
         if label in LISTS:
             details.append(f"- {label}: {list_values(body, *LISTS[label])}")
         time.sleep(1)  # one request at a time, politely
