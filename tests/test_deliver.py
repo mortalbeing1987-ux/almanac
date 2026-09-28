@@ -190,3 +190,81 @@ def test_outage_run_writes_status_but_no_bundle(tmp_path):
     st = state_mod.load(tmp_path)
     assert st.series["A1"]["last_status"] == "outage"  # recorded, never "up to date"
     assert set(s["freshness"]["stale"]) == {"A1", "A2", "B1_x", "B1_y"}
+
+
+def test_calendar_pass_writes_cal_bundle_status_and_is_insert_only(tmp_path):
+    from almanac import calendar as cal
+    reg = Registry(
+        sources={"a": {"url": "x"}, "cb": {"url": "https://cb.test/"}},
+        series=[
+            {"id": "A1", "source": "a", "key": "k1", "freq": "daily", "use": "B", "status": "active"},
+            {"id": "CB", "source": "cb", "key": "page", "freq": "event", "use": "D", "status": "active",
+             "kind": "cb_decision", "country": "XX", "name": "CB decision"}])
+    macro = lambda reg_, uses, http, since, today: collect(  # noqa: E731
+        reg_, uses, http, since, today, {"a": fetcher({"A1": [("2026-09-25", 1.0)]})})
+    dates = [date(2026, 10, 21), date(2026, 12, 9)]
+
+    def calc(reg_, http, today):
+        return cal.collect(reg_, http, today, {"cb": lambda ctx: dates})
+
+    s1 = deliver.run(reg, tmp_path, "BD", now=NOW, collector=macro, cal_collector=calc)
+    assert s1["events_delivered"] == 1 and s1["cal_bundle"] == "cal-20260928T223000Z"
+    assert s1["bundle"] == "macro-20260928T223000Z"
+    ahead = s1["freshness"]["calendar_ahead"]
+    assert ahead["sources"]["cb"]["furthest_event"] == "2026-12-09" and ahead["short"] == []
+    assert "CB" not in s1["freshness"]["series"]  # events are not observation series
+
+    dates[0] = date(2026, 10, 22)  # the institution moves the meeting by a day
+    later = datetime(2026, 9, 29, 2, 30, tzinfo=timezone.utc)
+    s2 = deliver.run(reg, tmp_path, "BD", now=later, collector=macro, cal_collector=calc)
+    assert s2["events_delivered"] == 1
+    import pyarrow.parquet as pq
+    new = pq.read_table(tmp_path / "bundles" / s2["cal_bundle"] / "events.parquet").to_pylist()
+    assert [r["event_id"] for r in new] == ["cb:cb_decision:2026-10-22"]
+    old = pq.read_table(tmp_path / "bundles" / s1["cal_bundle"] / "events.parquet").to_pylist()
+    assert [r["event_id"] for r in old] == ["cb:cb_decision:2026-10-21"]  # never rewritten
+
+    s3 = deliver.run(reg, tmp_path, "BD", now=datetime(2026, 9, 29, 22, 30, tzinfo=timezone.utc),
+                     collector=macro, cal_collector=calc)
+    assert s3["events_delivered"] == 0 and s3["cal_bundle"] is None
+    status = json.loads((tmp_path / "status.json").read_text())
+    assert status["freshness"]["calendar_ahead"]["sources"]["cb"]["ok"] is True
+
+
+def test_without_D_no_calendar_is_collected(tmp_path):
+    reg = mini_registry()
+    col = lambda reg_, uses, http, since, today: collect(  # noqa: E731
+        reg_, uses, http, since, today, {"a": fetcher({}), "b": fetcher({})})
+    s = deliver.run(reg, tmp_path, "B", now=NOW, collector=col,
+                    cal_collector=lambda *a: (_ for _ in ()).throw(AssertionError("called")))
+    assert s["calendar_sources"] == {} and s["freshness"]["calendar_ahead"] is None
+
+
+def test_status_json_lists_ids_in_window_only_for_ok_sources(tmp_path):
+    from almanac import calendar as cal
+    reg = Registry(
+        sources={"up": {"url": "u"}, "down": {"url": "d"}},
+        series=[{"id": s.upper(), "source": s, "key": "page", "freq": "event", "use": "D",
+                 "status": "active", "kind": "cb_decision", "country": "XX", "name": s}
+                for s in ("up", "down")])
+    dates = [date(2026, 10, 21), date(2026, 11, 4)]
+
+    def calc(reg_, http, today):
+        return cal.collect(reg_, http, today, {
+            "up": lambda ctx: list(dates),
+            "down": lambda ctx: (_ for _ in ()).throw(FetchError("outage", "HTTP 503"))})
+
+    s1 = deliver.run(reg, tmp_path, "D", now=NOW, cal_collector=calc)
+    up, down = s1["calendar_sources"]["up"], s1["calendar_sources"]["down"]
+    assert up["event_ids_in_window"] == ["up:cb_decision:2026-10-21", "up:cb_decision:2026-11-04"]
+    assert (up["window_from"], up["window_to"]) == ("2026-08-29", "2026-11-27")
+    assert down["status"] == "outage"
+    assert "event_ids_in_window" not in down and "window_from" not in down
+
+    dates.remove(date(2026, 10, 21))  # cancelled
+    s2 = deliver.run(reg, tmp_path, "D", now=datetime(2026, 9, 29, 2, 30, tzinfo=timezone.utc),
+                     cal_collector=calc)
+    assert s2["calendar_sources"]["up"]["event_ids_in_window"] == ["up:cb_decision:2026-11-04"]
+    assert s2["events_delivered"] == 0  # nothing new; the withdrawal is visible only via the list
+    on_disk = json.loads((tmp_path / "status.json").read_text())
+    assert "event_ids_in_window" not in on_disk["calendar_sources"]["down"]

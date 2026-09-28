@@ -168,7 +168,6 @@ def list_values(body: bytes, field: str, pattern: str) -> str:
 # header names stay visible. Enabled for the step-1 sources.
 SHAPE = {"fred", "treasury", "nyfed", "ecb", "snb", "boj", "rba", "mas"}
 
-
 def mask(s: str) -> str:
     """Numbers and dates -> 9s; digits inside codes (DGS10, 1TGT) are kept."""
     return re.sub(r"(?<![A-Za-z_\d])[-+]?\d[\d.,:/-]*(?![A-Za-z_\d])",
