@@ -39,8 +39,8 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
             first_key.setdefault(s["source"], k)
     for name, src in reg["sources"].items():
         url = src["url"]
-        if "{area}" in url:
-            continue  # probed per (key, area) below
+        if any(f in url for f in ("{area}", "{areas}", "{years}")):
+            continue  # needs per-request parameters; probed by the dedicated labels below
         if "{flow}" in url:
             url = "TBD"  # template needs a month; probed via its candidates
         if url == "TBD":
@@ -56,7 +56,7 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     # candidate keys on sources that already have a url (e.g. SARON on snb)
     # sources whose series have `areas`: one probe per (key, area)
     for s in reg.get("series", []):
-        if "areas" in s:
+        if "areas" in s and "{area}" in reg["sources"][s["source"]]["url"]:
             url = reg["sources"][s["source"]]["url"]
             for k in s["key"]:
                 for a in s["areas"]:
