@@ -7,6 +7,9 @@ state/
 *.csv
 *.xls
 *.xlsx
+# ...except small HAND-WRITTEN test fixtures (synthetic shapes, never real data)
+!tests/fixtures/
+!tests/fixtures/**
 # local config / secrets
 config.toml
 .env
