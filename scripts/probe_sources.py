@@ -78,7 +78,7 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     # use case E: CFTC legacy futures-only history (page + yearly zips), SNB
     # sight-deposit cube dimensions
     out.append(("cftc:history", "https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalCompressed/index.htm"))
-    for y in (f"{year}", f"{year - 1}", "2017", "1986_2016"):
+    for y in (f"{year}", "2015", "2014", "2000", "1990"):
         out.append((f"cftczip:{y}", f"https://www.cftc.gov/files/dea/history/deacot{y}.zip"))
     out.append(("snb:dims", "https://data.snb.ch/api/cube/snbgwdchfsgw/dimensions/en"))
     out.append(("snb:snbgwdchfsgw", reg["sources"]["snb"]["url"].format(key="snbgwdchfsgw", **fmt)))
@@ -221,7 +221,9 @@ def cot_zip(body: bytes) -> str:
     names = [f"{i.filename} ({i.file_size:,} B)" for i in z.infolist()]
     first = z.infolist()[0]
     text = z.read(first).decode("latin-1")
-    return "members: " + ", ".join(names) + "\n    " + cot_rows(text)
+    sample = [mask(l)[:160] for l in text.splitlines() if "092741" in l][:1]
+    return ("members: " + ", ".join(names) + "\n    first line: " + mask(text.splitlines()[0])[:300]
+            + "\n    CHF line: " + (sample[0] if sample else "none") + "\n    " + cot_rows(text))
 
 
 def snb_dims(body: bytes) -> str:
@@ -259,7 +261,15 @@ def snb_codes(body: bytes) -> str:
         f = [c.strip('"') for c in l.split(";")]
         if len(f) == len(cols):
             combos.setdefault("/".join(f[1:-1]), []).append(f[0])
-    return (f"header {cols}\n    " + "\n    ".join(
+    import datetime as dt
+    days: dict[str, dict[str, int]] = {}
+    for l in lines[head + 1:]:
+        f = [c.strip('"') for c in l.split(";")]
+        if len(f) == len(cols) and f[-1]:
+            wd = dt.date.fromisoformat(f[0]).strftime("%a")
+            days.setdefault(f[1], {}).setdefault(wd, 0)
+            days[f[1]][wd] += 1
+    return (f"header {cols}\n    non-empty by weekday: {days}\n    " + "\n    ".join(
         f"{k}: {len(v)} rows, {min(v)}..{max(v)}" for k, v in sorted(combos.items())))
 
 
