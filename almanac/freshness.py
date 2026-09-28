@@ -20,8 +20,6 @@ def expected_ids(series: dict) -> list[str]:
     """Delivered ids a series is expected to produce, where knowable up front."""
     if series["source"] == "treasury":  # tenor ids come from the file's columns
         return []
-    if "areas" in series or "flows" in series or "file" in series:
-        return []  # expanded per area/flow/table by their fetchers (later steps)
     return [i for k in keys(series) for i in delivered_ids(series, k)]
 
 

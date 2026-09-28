@@ -127,11 +127,13 @@ note = "keyless routes are gone; keyed call returns full history as JSON (~6.8 M
 # TBD sources: `candidates` are probed by scripts/probe_sources.py; the one that
 # works from GitHub's runners becomes `url`.
 [sources.bea]
-# BEA API, International Transactions (ITA): quarterly by partner. Free key,
-# stored ONLY as Actions secret BEA_API_KEY, sent as the UserID query param.
-# Probe 2026-09-28: frequencies A/QNSA/QSA only (no monthly); country names
-# like SouthKorea; AreaOrCountry=AllCountries returns the world total only.
-url = "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year={prev_year}&ResultFormat=JSON&Indicator={key}&AreaOrCountry={area}"
+# BEA API, International Transactions (ITA): quarterly SA by partner. Used as a
+# CROSS-CHECK of the geo workbook only. Free key, stored ONLY as Actions secret
+# BEA_API_KEY, sent as the UserID query param. One request per indicator:
+# comma-separated areas and years (probe 2026-09-28). Replies echo UserID, so
+# only BEA's error code is ever reported. Limits: 100 requests, 100 MB and 30
+# errors per minute (BEA API user guide).
+url = "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year={years}&ResultFormat=JSON&Indicator={key}&AreaOrCountry={areas}"
 secret = "BEA_API_KEY"
 auth_param = "UserID"
 
@@ -147,19 +149,15 @@ base = "https://www.bea.gov"
 files = { time_series = 'trad\d{4}-time-series\.xlsx', geo = 'trad\d{4}-geo-time-series\.xlsx' }
 
 [sources.census]
-# Census international trade API: monthly goods by partner -- the original
-# source behind FRED's EXP*/IMP*. Free key, stored ONLY as Actions secret
-# CENSUS_API_KEY, sent as the `key` query param. Probe 2026-09-28 (keyed,
-# 2026-06): 249 export / 252 import partner rows, all our partners present.
-# {flow} = exports | imports; {field} = ALL_VAL_MO (exports, FAS) | GEN_VAL_MO
-# (general imports, customs); one call per flow per month returns all partners.
-url = "https://api.census.gov/data/timeseries/intltrade/{flow}/hs?get=CTY_CODE,CTY_NAME,{field}&time={month}"
+# Census international trade API: monthly goods by partner, NSA, Census basis,
+# USD (dollars). Free key, stored ONLY as Actions secret CENSUS_API_KEY, sent as
+# the `key` query param. {flow} = exports | imports; {field} = ALL_VAL_MO
+# (exports, FAS value) | GEN_VAL_MO (general imports, customs value); one request
+# per flow returns every partner (repeated CTY_CODE, appended by the fetcher)
+# for every month from {month}. History from 2010-01 (probe 2026-09-28).
+url = "https://api.census.gov/data/timeseries/intltrade/{flow}/hs?get=CTY_CODE,CTY_NAME,{field}&time=from+{month}"
 secret = "CENSUS_API_KEY"
 auth_param = "key"
-candidates = [
-  "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO&time=2026-06",
-  "https://api.census.gov/data/timeseries/intltrade/imports/hs?get=CTY_CODE,CTY_NAME,GEN_VAL_MO&time=2026-06",
-]
 
 # ---- A. Curve & credit -------------------------------------------------------
 [[series]]
@@ -574,46 +572,127 @@ PAYEMS = { lookback_days = 1920, max_age_days = 75 }
 # no stable machine-readable official source (shillerdata.com xls link moves).
 
 # ---- G. Trade ----------------------------------------------------------------
+# Delivered: BEA's monthly release workbooks (time series + geo) and the Census
+# API. Cross-check only (never delivered): FRED (BEA totals) and the BEA ITA API
+# (geo workbook). Revisions (BEA annual revision, June 9 2026): goods revised
+# from 2021 and services from 1999, plus monthly revisions of recent months --
+# the workbooks hold all history, so every run compares all of it. Census: each
+# June the prior three years of NSA data are recompiled; country detail is not
+# revised monthly (census.gov/foreign-trade/guide/revisions.html).
+# Freshness: monthly data are released ~5 weeks after the month (BEA 2026
+# schedule); the latest month is 94-100 days old just before the next release.
+
 [[series]]
-id = "TRADE_MONTHLY"
+id = "TRADE_BEA_M"
 source = "bea_release"
 file = "time_series"
-# Table 1: exports, imports, balance -- total, goods (BoP), services; monthly
-# SA from 1992. Tables 2-3: services exports/imports by major category, monthly.
-key = ["Table 1", "Table 2", "Table 3"]
-expect = ["Exports, Imports, and Balances", "months seasonally adjusted",
-          "U.S. International Trade in Services by Major Category - Exports",
-          "U.S. International Trade in Services by Major Category - Imports"]
-freq = "monthly"
-units = "USD millions, seasonally adjusted"
+sheet = "Table 1"
+# Delivered id TRADE_BEA_M_<flow>_<item>: exports/imports/balance of goods and
+# services (GS), goods (G, balance of payments basis), services (S). Monthly SA
+# from 1992-01 (annual rows skipped).
+key = ["EXP", "IMP", "BAL"]
+measures = ["GS", "G", "S"]
+groups = { EXP = "Exports", IMP = "Imports", BAL = "Balance" }
+items = { GS = "Total", G = "Goods", S = "Services" }
+expect = { "Table 1" = ["Table 1. U.S. International Trade in Goods and Services", "Exports, Imports, and Balances"] }
+freq = "monthly"  # obs_date = first day of the month
+units = "USD millions, seasonally adjusted; goods on a balance of payments (BoP) basis"
 use = "G"
 status = "active"
 redistribution = "open"
+backfill = "full"
+lookback_days = 20000  # the whole workbook every run (services revised back to 1999)
+max_age_days = 105
 
 [[series]]
-id = "TRADE_BEA_EU"
+id = "TRADE_BEA_MS"
 source = "bea_release"
-file = "geo"
-# European Union column of the geo workbook (the ITA API has no EU area):
-# tables 1-9 = exports/imports/balance of goods and services, goods, services.
-key = ["Table 1", "Table 2", "Table 3", "Table 4", "Table 5", "Table 6", "Table 7", "Table 8", "Table 9"]
-column = "European Union"
-expect = ["European Union", "quarters seasonally adjusted",
-          "U.S. International Trade by Selected Countries and Areas - Exports of Goods and Services",
-          "U.S. International Trade by Selected Countries and Areas - Imports of Services"]
-freq = "quarterly"
-units = "USD millions, seasonally adjusted"
+file = "time_series"
+# Services by major category, monthly SA from 1999-01: TRADE_BEA_MS_<EXP|IMP>_<CAT>.
+# Tables 2 (exports) and 3 (imports) carry the same 11 categories (probe
+# 2026-09-28); the total is TRADE_BEA_M_<flow>_S. BEA publishes each table as
+# one consistent series from 1999 in the current presentation (EBOPS 2010);
+# the older presentation (Tables 4-5, from 1992, different categories) is not
+# spliced in.
+key = ["EXP", "IMP"]
+sheets = { EXP = "Table 2", IMP = "Table 3" }
+measures = ["MAINT", "TRANSPORT", "TRAVEL", "CONSTR", "INSUR", "FIN", "IP", "TELECOM", "OTHBUS", "PERSONAL", "GOVT"]
+columns = { MAINT = "Maintenance and Repair Services n.i.e.", TRANSPORT = "Transport", TRAVEL = "Travel", CONSTR = "Construction", INSUR = "Insurance Services", FIN = "Financial Services", IP = "Charges for the Use of Intellectual Property n.i.e.", TELECOM = "Telecom-munications, Computer, and Information Services", OTHBUS = "Other Business Services", PERSONAL = "Personal, Cultural, and Recreational Services", GOVT = "Government Goods and Services n.i.e." }
+expect = { "Table 2" = ["Table 2. U.S. International Trade in Services by Major Category", "Exports"], "Table 3" = ["Table 3. U.S. International Trade in Services by Major Category", "Imports"] }
+freq = "monthly"
+units = "USD millions, seasonally adjusted; services"
 use = "G"
 status = "active"
 redistribution = "open"
+backfill = "full"
+lookback_days = 20000
+max_age_days = 105
 
+[[series]]
+id = "TRADE_BEA_Q"
+source = "bea_release"
+file = "geo"
+# By partner, quarterly SA from 1999Q1: TRADE_BEA_Q_<flow>_<item>_<partner>,
+# obs_date = the quarter's first day (Q2 -> YYYY-04-01). BEA: "Area data
+# reflect the composition of the areas at the time of reporting" (EU).
+key = ["EXP_GS", "IMP_GS", "BAL_GS", "EXP_G", "IMP_G", "BAL_G", "EXP_S", "IMP_S", "BAL_S"]
+sheets = { EXP_GS = "Table 1", IMP_GS = "Table 2", BAL_GS = "Table 3", EXP_G = "Table 4", IMP_G = "Table 5", BAL_G = "Table 6", EXP_S = "Table 7", IMP_S = "Table 8", BAL_S = "Table 9" }
+measures = ["AU", "CA", "CH", "CN", "DE", "EU", "GB", "IN", "JP", "KR", "MX", "SG", "TW", "VN"]
+columns = { AU = "Australia", CA = "Canada", CH = "Switzerland", CN = "China", DE = "Germany", EU = "European Union", GB = "United Kingdom", IN = "India", JP = "Japan", KR = "Korea, South", MX = "Mexico", SG = "Singapore", TW = "Taiwan", VN = "Vietnam" }
+expect = { "Table 1" = ["Table 1. U.S. International Trade by Selected Countries and Areas", "Exports of Goods and Services"], "Table 2" = ["Table 2. U.S. International Trade by Selected Countries and Areas", "Imports of Goods and Services"], "Table 3" = ["Table 3. U.S. International Trade by Selected Countries and Areas", "Balance on Goods and Services"], "Table 4" = ["Table 4. U.S. International Trade by Selected Countries and Areas", "Exports of Goods"], "Table 5" = ["Table 5. U.S. International Trade by Selected Countries and Areas", "Imports of Goods"], "Table 6" = ["Table 6. U.S. International Trade by Selected Countries and Areas", "Balance on Goods"], "Table 7" = ["Table 7. U.S. International Trade by Selected Countries and Areas", "Exports of Services"], "Table 8" = ["Table 8. U.S. International Trade by Selected Countries and Areas", "Imports of Services"], "Table 9" = ["Table 9. U.S. International Trade by Selected Countries and Areas", "Balance on Services"] }
+freq = "quarterly"
+units = "USD millions, seasonally adjusted; goods on a balance of payments (BoP) basis"
+use = "G"
+status = "active"
+redistribution = "open"
+backfill = "full"
+lookback_days = 20000
+# The geo workbook is reissued only with January, April, July and October data
+# (probe 2026-09-28). Latest quarter's age just before the next one appeared:
+# 2025Q3 254 days (Mar 12 2026, a shutdown-delayed release), 2025Q4 251 (Jun
+# 9), 2026Q1 245 (Sep 3). Limit = 254 + 6 days for release-date shifts.
+max_age_days = 260
+
+[[series]]
+id = "TRADE_CEN_M"
+source = "census"
+# Goods by partner, monthly NSA from 2010-01: TRADE_CEN_M_<EXP|IMP>_G_<partner>.
+# WORLD = CTY_CODE "-" (TOTAL FOR ALL COUNTRIES), the same value fields.
+# EA = Census "EURO AREA" (0025) is NOT a fixed composition. Census notices
+# add members from the release that follows accession ("Change to the Euro
+# Area", 2023-01-05: Croatia from the FT-900 of March 8, 2023; Bulgaria from the
+# January 2026 FT-900; current members: census.gov/foreign-trade/guide/sec5.html).
+# The API's history (probe 2026-09-28, sums of members, booleans only): Dec 2019
+# and Jan 2020 = members at the time; Dec 2021 - Dec 2025 = members at the time
+# PLUS Croatia (back-applied before its 2023 accession); from Jan 2026 incl.
+# Bulgaria, not back-filled into 2025. A later annual revision that restates it
+# arrives as revisions. For a fixed composition, sum the member countries.
+key = ["EXP_G", "IMP_G"]
+flows = { EXP_G = { flow = "exports", field = "ALL_VAL_MO" }, IMP_G = { flow = "imports", field = "GEN_VAL_MO" } }
+measures = ["WORLD", "EU", "EA", "AU", "CA", "CH", "CN", "DE", "GB", "IN", "JP", "KR", "MX", "SG", "TW", "VN"]
+partners = { WORLD = "-", EU = "0003", EA = "0025", AU = "6021", CA = "1220", CH = "4419", CN = "5700", DE = "4280", GB = "4120", IN = "5330", JP = "5880", KR = "5800", MX = "2010", SG = "5590", TW = "5830", VN = "5520" }
+freq = "monthly"
+units = "USD (dollars, not millions), not seasonally adjusted; goods, Census basis; exports FAS value, general imports customs value"
+use = "G"
+status = "active"
+redistribution = "open"
+backfill = "full"
+lookback_days = 1300  # June recompiles the prior three years
+max_age_days = 105
+
+# ---- G cross-checks (fetched and compared, never delivered) --------------------
+# Results go to status.json `crosschecks` (ids and dates only); a mismatch is a
+# warning, never a block.
 [[series]]
 id = "TRADE_TOTAL_XCHECK"
 source = "fred"
-role = "crosscheck"  # fetched and compared with TRADE_MONTHLY table 1; never delivered
-# FRED republication of the same BoP totals: exports G&S, imports G&S,
-# balance G&S, balance goods. A mismatch or a missing BEA month raises a flag.
+role = "crosscheck"
+# FRED's republication of BEA's monthly totals (Table 1).
 key = ["BOPTEXP", "BOPTIMP", "BOPGSTB", "BOPGTB"]
+compare = "TRADE_BEA_M_{target}"
+targets = { BOPTEXP = "EXP_GS", BOPTIMP = "IMP_GS", BOPGSTB = "BAL_GS", BOPGTB = "BAL_G" }
+tolerance = 0.5  # USD millions (both are published in whole millions)
+window_days = 1100
 freq = "monthly"
 units = "USD millions, seasonally adjusted"
 use = "G"
@@ -621,47 +700,17 @@ status = "active"
 redistribution = "open"
 
 [[series]]
-id = "TRADE_CENSUS"
-source = "census"
-# Monthly goods trade by partner (exports FAS, general imports customs), NSA,
-# USD. Keys are Census CTY_CODEs; "-" = total for all countries.
-# Delivered id: TRADE_CENSUS_<EXP|IMP>_<code>. Replaces FRED's EXP*/IMP*
-# (same Census data, adds South Korea). HS/NAICS sector detail: later step.
-key = [
-  "-",     # World
-  "0003",  # European Union
-  "1220",  # Canada
-  "2010",  # Mexico
-  "4120",  # United Kingdom
-  "4280",  # Germany
-  "4419",  # Switzerland
-  "5330",  # India
-  "5520",  # Vietnam
-  "5590",  # Singapore
-  "5700",  # China
-  "5800",  # South Korea
-  "5830",  # Taiwan
-  "5880",  # Japan
-]
-flows = { exports = "ALL_VAL_MO", imports = "GEN_VAL_MO" }
-freq = "monthly"
-units = "USD, not seasonally adjusted"
-use = "G"
-status = "active"
-redistribution = "open"
-
-[[series]]
-id = "TRADE_BEA"
+id = "TRADE_ITA_XCHECK"
 source = "bea"
-# Goods and services, exports and imports, by partner (BoP basis, quarterly SA).
-# Combined G&S (ExpGdsServ) returned no rows for SouthKorea, so goods and
-# services are collected separately. Delivered id: TRADE_BEA_<Indicator>_<Area>.
+role = "crosscheck"
+# The ITA API's quarterly SA goods/services by partner vs the geo workbook.
 key = ["ExpGds", "ImpGds", "ExpServ", "ImpServ"]
-# Probe 2026-09-28 (QSA, 2025): all 4 indicators x these 13 areas returned 4
-# quarters. EuroArea/Europe answered with ~1.3 KB (no data rows) -- left out.
-areas = ["AllCountries", "Canada", "Mexico", "China", "Japan", "Germany",
-         "UnitedKingdom", "SouthKorea", "Taiwan", "Vietnam", "India", "Switzerland",
-         "Singapore"]
+measures = ["AU", "CA", "CH", "CN", "DE", "EU", "GB", "IN", "JP", "KR", "MX", "SG", "TW", "VN"]
+areas = { AU = "Australia", CA = "Canada", CH = "Switzerland", CN = "China", DE = "Germany", EU = "EU", GB = "UnitedKingdom", IN = "India", JP = "Japan", KR = "SouthKorea", MX = "Mexico", SG = "Singapore", TW = "Taiwan", VN = "Vietnam" }
+compare = "TRADE_BEA_Q_{target}_{measure}"
+targets = { ExpGds = "EXP_G", ImpGds = "IMP_G", ExpServ = "EXP_S", ImpServ = "IMP_S" }
+tolerance = 1.0
+window_days = 1100
 freq = "quarterly"
 units = "USD millions, seasonally adjusted"
 use = "G"
