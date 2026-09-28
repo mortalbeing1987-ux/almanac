@@ -43,6 +43,24 @@ url = "https://data-api.ecb.europa.eu/service/data/{key}?format=csvdata&startPer
 [sources.snb]
 url = "https://data.snb.ch/api/cube/{key}/data/csv/en"
 
+[sources.boc]
+# Bank of Canada Valet API: keyless CSV. Terms (bankofcanada.ca/terms): the
+# Bank "permits you to freely use, copy, distribute and transmit its website
+# content" (exceptions: bank note images, logo, third-party content).
+url = "https://www.bankofcanada.ca/valet/observations/{key}/csv?start_date={since}"
+
+[sources.boe]
+# Bank of England Interactive Statistical Database (IADB): keyless CSV,
+# reachable from GitHub's runners (probe 2026-09-28). Database data are
+# reusable under the UK Open Government Licence v3.0. SONIA attribution
+# required: "SONIA and/or SONIA Compounded Index data licensed under the Open
+# Government Licence v3.0 and copyright the Governor and Company of the Bank of
+# England." A direct licence is needed only for services to end-users
+# (redistribution to clients, listed derivatives, clearing, valuing clients'
+# portfolios). The free database copy appears by 10:00 London on the working
+# day after first publication. {since} is dd/Mon/yyyy (set by the fetcher).
+url = "https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom={since}&Dateto=now&SeriesCodes={key}&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N"
+
 [sources.cboe]
 url = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{key}_History.csv"
 
@@ -257,6 +275,35 @@ units = "percent"
 use = "B"
 status = "active"
 redistribution = "restricted"  # owner decision 2026-09-28: MAS API terms not reviewed; treat as restricted
+
+[[series]]
+id = "CORRA"
+source = "boc"
+key = "AVG.INTWO"  # Canadian Overnight Repo Rate Average (%), from 1997
+freq = "daily"
+units = "percent"
+use = "B"
+status = "active"
+redistribution = "open"
+# Published 09:00 ET the next business day: normally at most 4 days old at a
+# run (Tue 02:30 UTC shows Friday's); after a Canadian holiday Monday, 5 at
+# the Tue 02:30 UTC run -- the same holiday case as SOFR's 4-day limit.
+
+[[series]]
+id = "SONIA"
+source = "boe"
+key = "IUDSOIA"  # Sterling Overnight Index Average (%), from 1997
+freq = "daily"
+units = "percent"
+use = "B"
+status = "active"
+redistribution = "open"  # OGL v3.0 with attribution (see [sources.boe])
+# The free database copy lags: day T is published T+1 and reaches the IADB by
+# 10:00 London on T+2 (business days). At the Tue/Wed 02:30 UTC runs the
+# latest value is 5 days old every week; a UK bank holiday adds a day,
+# Easter (Good Friday + Easter Monday) two. 4 days would flag it stale twice
+# a week; 7 covers Easter.
+max_age_days = 7
 
 # ---- C. Regime ---------------------------------------------------------------
 [[series]]

@@ -1,0 +1,13 @@
+"TERMS AND CONDITIONS"
+"https://www.bankofcanada.ca/terms/"
+
+"SERIES"
+"id","label","description"
+"AVG.INTWO","Canadian Overnight Repo Rate Average (CORRA) (%)","Canadian Overnight Repo Rate Average (CORRA) (%)"
+
+"OBSERVATIONS"
+"date","AVG.INTWO"
+"2026-09-22","1.1111"
+"2026-09-23",""
+"2026-09-24","1.1122"
+"2026-09-25","1.1133"

@@ -9,7 +9,7 @@ brokerage API doesn't provide (or provides poorly):
 | Use | Data |
 |---|---|
 | **A. Curve & credit** | Treasury par yield curve incl. true bills (1M–30Y), constant-maturity Treasury history, ICE BofA OAS by rating band, real yields, breakevens |
-| **B. Funding & carry inputs** | Overnight rates: SOFR, EFFR (USD), €STR (EUR), SARON (CHF), TONA (JPY), RBA cash rate (AUD), SORA (SGD) |
+| **B. Funding & carry inputs** | Overnight rates: SOFR, EFFR (USD), €STR (EUR), SARON (CHF), TONA (JPY), RBA cash rate (AUD), SORA (SGD), CORRA (CAD), SONIA (GBP) |
 | **C. Regime** | VIX, VIX3M, VVIX, HY OAS, 10y–3m and 10y–2y spreads, NFCI, broad USD index, initial jobless claims |
 | **D. Event calendar** | FOMC; SNB, ECB, BoJ, RBA and MAS policy decisions; US CPI, payrolls, GDP release dates |
 | **E. Positioning & CB balance sheets** | CFTC Commitments of Traders (currency futures: non-commercial long/short/net, open interest), SNB sight deposits (total, domestic banks) |
@@ -141,6 +141,18 @@ dates). Step 0 outcome (2026-09-28, from GitHub's runners): TONA from the BoJ
 Time-Series Data Search API (keyless CSV), RBA cash rate from statistical
 table F1 (keyless CSV), SARON from SNB cube `snbgwdzid`, SORA from the MAS API
 gateway with the owner's free key (secret `MAS_API_KEY`). CAPE dropped.
+
+CORRA from the Bank of Canada Valet API (series `AVG.INTWO`, keyless CSV; the
+Bank's terms permit free use, copying and distribution). SONIA from the Bank
+of England database (IADB, series `IUDSOIA`, keyless CSV, reachable from
+GitHub's runners) under the UK Open Government Licence v3.0; consumers that
+show SONIA must carry the attribution "SONIA and/or SONIA Compounded Index
+data licensed under the Open Government Licence v3.0 and copyright the
+Governor and Company of the Bank of England." A direct BoE licence is needed
+only for services to end-users (redistribution to clients, listed
+derivatives, clearing, valuing clients' portfolios). The free copy reaches
+the database by 10:00 London on the working day after first publication, so
+SONIA's freshness limit is 7 days.
 
 Use case E (probe 2026-09-28): CFTC legacy futures-only COT, contracts
 identified by CFTC contract market code (CHF 092741, JPY 097741, EUR 099741,
