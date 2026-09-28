@@ -161,6 +161,51 @@ def list_values(body: bytes, field: str, pattern: str) -> str:
     return ", ".join(seen)[:1500] or "none"
 
 
+# Layout ("shape") of a response, for writing parsers and fixtures: every
+# digit is replaced by 9, so no value can be read back. Labels, codes and
+# header names stay visible. Enabled for the step-1 sources.
+SHAPE = {"fred", "treasury", "nyfed", "ecb", "snb", "boj", "rba", "mas"}
+
+
+def mask(s: str) -> str:
+    """Numbers and dates -> 9s; digits inside codes (DGS10, 1TGT) are kept."""
+    return re.sub(r"(?<![A-Za-z_\d])[-+]?\d[\d.,:/-]*(?![A-Za-z_\d])",
+                  lambda m: re.sub(r"\d", "9", m.group()), s)
+
+
+def shape(body: bytes) -> str:
+    text = body.decode("utf-8-sig", "replace")
+    if text.lstrip()[:1] in ("{", "["):
+        try:
+            doc = json.loads(text)
+        except ValueError:
+            return "json (unparseable)"
+        out: list[str] = []
+
+        def walk(o: object, path: str) -> None:
+            if len(out) > 60:
+                return
+            if isinstance(o, dict):
+                for k, v in o.items():
+                    walk(v, f"{path}.{k}")
+            elif isinstance(o, list):
+                out.append(f"{path}: list[{len(o)}]")
+                if o:
+                    walk(o[0], f"{path}[0]")
+            elif isinstance(o, str):
+                out.append(f"{path}: str {mask(o)[:60]!r}")
+            else:
+                out.append(f"{path}: {type(o).__name__}")
+
+        walk(doc, "$")
+        return "\n    ".join(out)
+    lines = text.splitlines()
+    head = lines[:14]
+    tail = lines[-2:] if len(lines) > 16 else []
+    shown = [mask(line)[:220] for line in head] + (["..."] + [mask(line)[:220] for line in tail] if tail else [])
+    return f"{len(lines)} lines:\n    " + "\n    ".join(shown)
+
+
 def sniff(body: bytes) -> str:
     """Shape of the body only (csv/json/html/xls/...), never its values."""
     head = body[:512].lstrip().lower()
@@ -238,6 +283,8 @@ def main() -> int:
             continue
         cells, body = probe(url, marker_for(label), *creds)
         lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
+        if label in SHAPE and body:
+            details.append(f"- {label} shape: {shape(body)}")
         if label in TITLES and cells[3] == "html":
             m = re.search(rb"<title[^>]*>(.*?)</title>", body, re.I | re.S)
             details.append(f"- {label} page title: {m.group(1).decode('utf-8', 'replace').strip()[:120] if m else 'none'}")
