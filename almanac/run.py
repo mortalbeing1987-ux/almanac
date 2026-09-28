@@ -31,28 +31,46 @@ def fetchers() -> dict[str, Fetcher]:
             "mas": mas.fetch}
 
 
-def collect(reg: Registry, uses: str, http: Http, since: date,
+def collect(reg: Registry, uses: str, http: Http, since: date | dict[str, date],
             today: date | None = None, table: dict[str, Fetcher] | None = None) -> list[SourceResult]:
+    """Fetch every active series of the selected use cases, source by source.
+
+    Canary: a source's first series is fetched on its own first. If that fails
+    the source is recorded as outage/error and nothing is written for it. If a
+    later series fails, the canary's rows are kept and the source is `error`.
+    `since` is one date or a per-source mapping.
+    """
     today = today or datetime.now(timezone.utc).date()
     table = fetchers() if table is None else table
     results = []
     for source, series in sorted(reg.by_source(reg.select(uses)).items()):
+        start = since[source] if isinstance(since, dict) else since
         fn = table.get(source)
         if fn is None:
             results.append(SourceResult(source, "error", "no fetcher for this source yet", _now()))
             continue
-        try:
-            obs = [o for o in fn(Ctx(http, source, reg.sources[source], series, since, today))
-                   if o.obs_date >= since.isoformat()]
-        except FetchError as e:
-            results.append(SourceResult(source, e.kind, e.reason, _now()))
-            continue
-        except Exception as e:  # a parser bug or layout change: record, never "up to date"
-            results.append(SourceResult(source, "error", f"{type(e).__name__}: {e}"[:300], _now()))
-            continue
-        status = "ok" if obs else "empty"
-        reason = "" if obs else f"no observations since {since.isoformat()}"
-        results.append(SourceResult(source, status, reason, _now(), obs))
+        obs: list[Observation] = []
+        for i, batch in enumerate(([series[0]], series[1:])):
+            if not batch:
+                continue
+            try:
+                got = fn(Ctx(http, source, reg.sources[source], batch, start, today))
+            except FetchError as e:
+                kind, reason = e.kind, e.reason
+            except Exception as e:  # a parser bug or layout change: record, never "up to date"
+                kind, reason = "error", f"{type(e).__name__}: {e}"[:300]
+            else:
+                obs += [o for o in got if o.obs_date >= start.isoformat()]
+                continue
+            if i == 0:  # canary failed: write nothing for this source
+                results.append(SourceResult(source, kind, f"canary {series[0]['id']}: {reason}", _now()))
+            else:
+                results.append(SourceResult(source, "error", f"after canary: {reason}", _now(), obs))
+            break
+        else:
+            status = "ok" if obs else "empty"
+            reason = "" if obs else f"no observations since {start.isoformat()}"
+            results.append(SourceResult(source, status, reason, _now(), obs))
     return results
 
 

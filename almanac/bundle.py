@@ -59,6 +59,14 @@ def assign_revisions(results: list[SourceResult], delivered: Delivered) -> list[
     return rows
 
 
+def _freshness_summary(freshness: dict | None) -> dict | None:
+    """Compact form for the manifest; the full detail is in status.json."""
+    if freshness is None:
+        return None
+    return {"as_of": freshness["as_of"], "series": len(freshness["series"]),
+            "stale": freshness["stale"], "calendar_ahead": freshness["calendar_ahead"]}
+
+
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -69,7 +77,9 @@ def _sha256(path: Path) -> str:
 
 def write_macro_bundle(out_dir: Path, started: datetime, results: list[SourceResult],
                        delivered: Delivered | None = None,
-                       finished: datetime | None = None) -> Path:
+                       finished: datetime | None = None,
+                       rows: list[dict] | None = None,
+                       freshness: dict | None = None) -> Path:
     run_id = run_id_for(started)
     final = out_dir / f"macro-{run_id}"
     work = out_dir / f"macro-{run_id}.partial"
@@ -77,7 +87,8 @@ def write_macro_bundle(out_dir: Path, started: datetime, results: list[SourceRes
         raise FileExistsError(final)
     work.mkdir(parents=True, exist_ok=False)
 
-    rows = assign_revisions(results, delivered or {})
+    if rows is None:
+        rows = assign_revisions(results, delivered or {})
     table = pa.Table.from_pylist(rows, schema=SCHEMA)
     data = work / "observations.parquet"
     pq.write_table(table, data)
@@ -94,7 +105,7 @@ def write_macro_bundle(out_dir: Path, started: datetime, results: list[SourceRes
                                "fetched_at": r.fetched_at,
                                "observations": len(r.observations)}
                     for r in sorted(results, key=lambda r: r.source)},
-        "freshness": None,  # step 2
+        "freshness": _freshness_summary(freshness),
     }
     (work / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     work.rename(final)

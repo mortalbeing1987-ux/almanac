@@ -28,3 +28,9 @@ jobs:
           # Owner-added Actions secrets; only ever placed in requests, never printed.
           MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
         run: python -m almanac collect --uses AB --out "$RUNNER_TEMP/out"
+      - name: Two delivery passes into a scratch folder (status only)
+        env:
+          MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
+        run: |
+          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses AB
+          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses AB
