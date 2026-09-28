@@ -14,7 +14,7 @@ brokerage API doesn't provide (or provides poorly):
 | **D. Event calendar** | FOMC; SNB, ECB, BoJ, RBA and MAS policy decisions; US CPI, payrolls, GDP release dates |
 | **E. Positioning & CB balance sheets** | CFTC Commitments of Traders (currency futures: non-commercial long/short/net, open interest), SNB sight deposits (total, domestic banks) |
 | **F. Long-run backdrop** | US CPI (headline SA and NSA, core SA), unemployment rate, nonfarm payrolls — CAPE dropped in step 0 |
-| **G. Trade** | US exports, imports and balance plus services by category (BEA monthly release workbook; FRED kept as a cross-check only); goods by partner incl. South Korea (Census API, monthly); goods and services by partner (BEA ITA API, quarterly; EU from BEA's geo workbook) — inputs for GDP, FX and sector views |
+| **G. Trade** | US exports, imports and balances: monthly totals and services by 11 categories (BEA release workbook, SA); quarterly by 14 partners incl. the EU (BEA geo workbook, SA); monthly goods by 16 partners incl. the euro area and the world total (Census API, NSA). FRED and the BEA ITA API are cross-checks only |
 
 Consumers (analysis, dashboards, reports) live **outside** this repo. Almanac
 only collects, validates and delivers.
@@ -95,6 +95,23 @@ covered.
 `calendar_sources` (per source: status, events in horizon, furthest event) and
 `freshness.calendar_ahead`: per calendar source, the furthest event found and
 `ok = false` when it is less than 60 days out (listed under `short`).
+
+`status.json` also carries `crosschecks` (use case G): per cross-check series,
+`status` (`ok` / `mismatch` / `unavailable`), `compared`, `mismatch_count` and
+up to 50 `mismatches` as `{series_id, obs_date}` -- ids and dates only, never
+values. A mismatch is a warning, never a block: delivery goes ahead.
+
+Trade (use case G, probe 2026-09-28): BEA's monthly release page links the
+current workbooks (`trad<MMYY>-time-series.xlsx`, `trad<MMYY>-geo-time-series.xlsx`);
+the newest release number is used and its latest period must be that
+release's. The geo workbook is reissued only with January, April, July and
+October data. Ids: `TRADE_BEA_M_<EXP|IMP|BAL>_<GS|G|S>` (monthly SA, USD
+millions, goods BoP basis), `TRADE_BEA_MS_<EXP|IMP>_<category>` (monthly SA),
+`TRADE_BEA_Q_<EXP|IMP|BAL>_<GS|G|S>_<partner>` (quarterly SA, obs_date = the
+quarter's first day), `TRADE_CEN_M_<EXP|IMP>_G_<partner>` (monthly NSA goods,
+Census basis, USD dollars). BEA's June annual revision revises goods back ~5
+years and services back to 1999, so the workbooks are compared in full every
+run; Census recompiles the prior three years each June (look-back 1300 days).
 
 Withdrawn events: when a source's status is `ok`, its
 `calendar_sources.<source>` entry also has `event_ids_in_window` (sorted ids the

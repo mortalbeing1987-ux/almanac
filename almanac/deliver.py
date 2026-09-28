@@ -17,7 +17,7 @@ from pathlib import Path
 from . import calendar, freshness, state as state_mod
 from .bundle import assign_revisions, run_id_for, write_macro_bundle
 from .http import Http
-from .registry import Registry, delivered_ids, key_settings, keys
+from .registry import Registry, delivered_ids, key_of, key_settings, keys
 from .run import collect
 
 # Re-fetch window, by frequency, so revisions to already-delivered values are
@@ -105,8 +105,54 @@ def record_backfill(selected: list[dict], st: state_mod.State, since: dict[str, 
                     st.series[sid]["backfilled_from"] = rec
 
 
+MAX_MISMATCHES = 50  # listed in status.json; the count is always complete
+
+
+def crosscheck(xseries: list[dict], xresults: list, results: list) -> dict:
+    """Compare cross-check series with this run's delivered-candidate values.
+
+    Each cross-check series names its counterpart id with `compare` (a template
+    over the key's `targets` entry and the measure) and a `tolerance`. Only ids
+    and dates are reported; a mismatch is a warning, never a block, and a
+    failed cross-check fetch is `unavailable`, never a delivery problem."""
+    values = {(o.series_id, o.obs_date): o.value for r in results for o in r.observations}
+    by_source = {r.source: r for r in xresults}
+    out = {}
+    for s in xseries:
+        res = by_source.get(s["source"])
+        entry = {"source": s["source"], "compared": 0, "mismatch_count": 0, "mismatches": []}
+        if res is None or res.status != "ok":
+            entry.update(status="unavailable", reason=(res.reason if res else "not fetched")[:200])
+            out[s["id"]] = entry
+            continue
+        for o in res.observations:
+            if not o.series_id.startswith(s["id"] + "_"):
+                continue
+            key = key_of(s, o.series_id)
+            measure = o.series_id[len(s["id"]) + 1 + len(key) + 1:] if "measures" in s else ""
+            target = s["compare"].format(target=s["targets"][key], measure=measure)
+            mine = values.get((target, o.obs_date))
+            if mine is None:
+                continue
+            entry["compared"] += 1
+            if abs(mine - o.value) > s["tolerance"]:
+                entry["mismatch_count"] += 1
+                if len(entry["mismatches"]) < MAX_MISMATCHES:
+                    entry["mismatches"].append({"series_id": target, "obs_date": o.obs_date})
+        entry["status"] = ("mismatch" if entry["mismatch_count"] else
+                           "ok" if entry["compared"] else "unavailable")
+        entry["reason"] = "" if entry["compared"] else "nothing to compare"
+        out[s["id"]] = entry
+    return out
+
+
+def _cross_collect(reg, uses, http, since, today):
+    return collect(reg, uses, http, since, today, role="crosscheck")
+
+
 def run(reg: Registry, data_dir: Path, uses: str, http: Http | None = None,
-        now: datetime | None = None, collector=collect, cal_collector=calendar.collect) -> dict:
+        now: datetime | None = None, collector=collect, cal_collector=calendar.collect,
+        cross_collector=_cross_collect) -> dict:
     """One pass. Use case D (the event calendar) goes to a `cal-` bundle; every
     other use case goes to the `macro-` bundle."""
     now = now or datetime.now(timezone.utc)
@@ -117,6 +163,12 @@ def run(reg: Registry, data_dir: Path, uses: str, http: Http | None = None,
     selected = reg.select(macro_uses) if macro_uses else []
     since = since_by_series(selected, st, today)
     results = collector(reg, macro_uses, http, since, today) if macro_uses else []
+
+    xseries = reg.select(macro_uses, role="crosscheck") if macro_uses else []
+    checks = {}
+    if xseries:
+        xsince = {s["id"]: today - timedelta(days=int(s.get("window_days", 1100))) for s in xseries}
+        checks = crosscheck(xseries, cross_collector(reg, macro_uses, http, xsince, today), results)
 
     rows = assign_revisions(results, st.delivered)
     ids_by_source: dict[str, set[str]] = {}
@@ -157,6 +209,7 @@ def run(reg: Registry, data_dir: Path, uses: str, http: Http | None = None,
                                             default=today).isoformat()}
                     for r in results},
         "calendar_sources": {r.source: _cal_source_status(r) for r in cal_results},
+        "crosschecks": checks,
         "freshness": fresh,
     }
     (data_dir / "status.json").write_text(json.dumps(status, indent=2, sort_keys=True) + "\n")

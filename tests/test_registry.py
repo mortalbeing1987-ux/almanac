@@ -42,7 +42,8 @@ def test_no_source_key_listed_twice():
     for s in REG["series"]:
         keys = s["key"] if isinstance(s["key"], list) else [s["key"]]
         for k in keys:
-            ident = (s["source"], s.get("file"), s.get("column"), k)
+            sheet = s.get("sheets", {}).get(k, s.get("sheet"))
+            ident = (s["source"], s.get("file"), sheet, s.get("column"), k)
             assert ident not in seen, (s["id"], k)
             seen.add(ident)
 
@@ -54,3 +55,12 @@ def test_roles_and_release_files():
             src = REG["sources"][s["source"]]
             assert s["file"] in src.get("files", {}), s["id"]
             assert s.get("expect"), s["id"]
+
+
+def test_no_series_id_is_a_prefix_of_another():
+    """Delivered ids are `<id>_<key>...`: a series id that prefixes another's
+    (TRADE_BEA_M vs TRADE_BEA_M_S...) would mix their state and freshness."""
+    ids = [s["id"] for s in REG["series"]]
+    for a in ids:
+        for b in ids:
+            assert a == b or not b.startswith(a + "_"), (a, b)

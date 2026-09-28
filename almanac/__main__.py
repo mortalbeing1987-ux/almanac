@@ -1,5 +1,5 @@
 """python -m almanac collect --uses AB --since 2026-09-01 --out out/
-python -m almanac deliver --data-dir <checked-out private data repo> --uses ABCDEF
+python -m almanac deliver --data-dir <checked-out private data repo> --uses ABCDEFG
 
 `collect` fetches and writes one bundle to --out; `deliver` runs a scheduled
 pass with delivery state (see deliver.py). Both print per-source status and
@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--out", type=Path, default=Path("out"))
     d = sub.add_parser("deliver", help="scheduled pass into a checked-out private data repo")
     d.add_argument("--data-dir", type=Path, required=True)
-    d.add_argument("--uses", default="ABCDEF", help="use-case tags, e.g. ABCDEF (D = event calendar)")
+    d.add_argument("--uses", default="ABCDEFG", help="use-case tags, e.g. ABCDEFG (D = event calendar)")
     args = ap.parse_args(argv)
 
     if args.cmd == "deliver":
@@ -45,6 +45,10 @@ def main(argv: list[str] | None = None) -> int:
               f"  bundle: {status['bundle']}{size}")
         if status["bundle"]:
             print("rows by series: " + ", ".join(f"{k} {n}" for k, n in sorted(_rows_by_series(parquet).items())))
+        for xid, x in sorted(status["crosschecks"].items()):
+            flag = "WARNING " if x["status"] == "mismatch" else ""
+            print(f"{flag}crosscheck {xid}: {x['status']}, compared {x['compared']}, "
+                  f"mismatches {x['mismatch_count']}  {x['reason']}")
         stale = status["freshness"]["stale"]
         print(f"stale series: {len(stale)}{'  ' + ', '.join(stale) if stale else ''}")
         for src, s in sorted(status["calendar_sources"].items()):

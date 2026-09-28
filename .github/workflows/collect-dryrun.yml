@@ -29,6 +29,8 @@ jobs:
         env:
           # Owner-added Actions secrets; only ever placed in requests, never printed.
           MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
+          BEA_API_KEY: ${{ secrets.BEA_API_KEY }}
+          CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
         run: python -m almanac collect --uses AB --out "$RUNNER_TEMP/out"
       - name: Check out the private data repo, read-only
         # The state to start from: a copy of the real one, so series that were
@@ -55,6 +57,8 @@ jobs:
       - name: Two delivery passes into the scratch copy (status only)
         env:
           MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
+          BEA_API_KEY: ${{ secrets.BEA_API_KEY }}
+          CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
         run: |
-          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses ABCDEF
-          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses ABCDEF
+          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses ABCDEFG
+          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses ABCDEFG

@@ -39,8 +39,8 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
             first_key.setdefault(s["source"], k)
     for name, src in reg["sources"].items():
         url = src["url"]
-        if "{area}" in url:
-            continue  # probed per (key, area) below
+        if any(f in url for f in ("{area}", "{areas}", "{years}")):
+            continue  # needs per-request parameters; probed by the dedicated labels below
         if "{flow}" in url:
             url = "TBD"  # template needs a month; probed via its candidates
         if url == "TBD":
@@ -56,7 +56,7 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     # candidate keys on sources that already have a url (e.g. SARON on snb)
     # sources whose series have `areas`: one probe per (key, area)
     for s in reg.get("series", []):
-        if "areas" in s:
+        if "areas" in s and "{area}" in reg["sources"][s["source"]]["url"]:
             url = reg["sources"][s["source"]]["url"]
             for k in s["key"]:
                 for a in s["areas"]:
@@ -75,6 +75,43 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     # full-history FRED files for the weekly / lagged series (cosd from 1900)
     for k in ("NFCI", "ICSA", "DTWEXBGS", "T10Y3M"):
         out.append((f"fredfull:{k}", reg["sources"]["fred"]["url"].format(key=k, **dict(fmt, since="1900-01-01"))))
+    # PR 8 plan: BEA ITA parameter values (names only) and a multi-area call;
+    # Census partner codes and history depth
+    bea_base = "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ResultFormat=JSON&ParameterName="
+    out.append(("beameta:areas", bea_base + "AreaOrCountry"))
+    out.append(("beameta:indicators", bea_base + "Indicator"))
+    out.append(("beameta:multi", "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year=ALL"
+                "&ResultFormat=JSON&Indicator=ExpServ&AreaOrCountry=Canada,Japan,Switzerland,Australia,EuroArea,EuropeanUnion"))
+    cen = "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO&time="
+    out.append(("census:partners", cen + "2026-06"))
+    out.append(("census:span", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,ALL_VAL_MO&CTY_CODE=5800&time=from+2000-01"))
+    # quarterly freshness: when did each quarter first appear in the geo workbook?
+    months = ["january", "february", "march", "april", "may", "june", "july", "august", "september",
+              "october", "november", "december"]
+    for yr, last in ((2025, 12), (2026, 7)):
+        for m in range(1, last + 1):
+            # the page for data month m is published in the year the release happens
+            pub = yr if m < 11 or yr == 2026 else yr + 1
+            for py in sorted({yr, pub}):
+                out.append((f"beahist:{yr}-{m:02d}@{py}",
+                            f"https://www.bea.gov/news/{py}/us-international-trade-goods-and-services-{months[m - 1]}-{yr}"))
+    # euro-area composition: EA vs the sum of its members, picked by name (booleans only)
+    out.append(("census:eacheck", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
+                "&time=from+2010-01+to+2010-01&time=2014-01"))
+    out.append(("census:eacheck2", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
+                "&time=from+2019-12+to+2020-01"))
+    out.append(("census:eacheck3", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
+                "&time=from+2021-12+to+2022-01"))
+    cen2 = ("https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
+            "&time=from+2026-04&CTY_CODE=-&CTY_CODE=0025&CTY_CODE=6021")
+    out.append(("census:multi", cen2))
+    out.append(("census:ea-notice", "https://www.census.gov/foreign-trade/statistics/notices/20230105_euro_area_change.pdf"))
+    out.append(("census:groupings", "https://www.census.gov/foreign-trade/guide/sec5.html"))
+    out.append(("census:statsinfo", "https://www.census.gov/foreign-trade/reference/guides/tradestatsinfo.html"))
+    out.append(("beameta:error", "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year=2025"
+                "&ResultFormat=JSON&Indicator=NoSuchIndicator&AreaOrCountry=Japan"))
+    out.append(("beameta:years", "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year=2024,2025,2026"
+                "&ResultFormat=JSON&Indicator=ExpGds&AreaOrCountry=EU,Japan"))
     # PR 7: CORRA (Bank of Canada Valet) and SONIA (Bank of England IADB), plus
     # each bank's terms pages (text excerpts only)
     out.append(("corra:csv", "https://www.bankofcanada.ca/valet/observations/AVG.INTWO/csv?start_date=" + fmt["since"]))
@@ -154,6 +191,113 @@ def xlsx_contents(body: bytes) -> tuple[list[str], list[str]] | None:
     sheets = re.findall(r'<sheet [^>]*name="([^"]+)"', book)
     labels = [re.sub(r"<[^>]+>", "", x).strip() for x in re.findall(r"<si>(.*?)</si>", ss, re.S)]
     return sheets, labels
+
+
+def xlsx_cells(body: bytes, sheet: str, strings_only: bool = True) -> dict:
+    """{(col, row): text} of one sheet's STRING cells; with strings_only=False
+    numeric cells map to "#" (presence only -- values are never read)."""
+    import io
+    import zipfile
+    z = zipfile.ZipFile(io.BytesIO(body))
+    ss = z.read("xl/sharedStrings.xml").decode("utf-8", "replace") if "xl/sharedStrings.xml" in z.namelist() else ""
+    strings = [re.sub(r"<[^>]+>", "", x).strip() for x in re.findall(r"<si>(.*?)</si>", ss, re.S)]
+    book = z.read("xl/workbook.xml").decode("utf-8", "replace")
+    rels = z.read("xl/_rels/workbook.xml.rels").decode("utf-8", "replace")
+    target = dict(re.findall(r'Id="([^"]+)"[^>]*Target="([^"]+)"', rels))
+    target.update({k: v for v, k in re.findall(r'Target="([^"]+)"[^>]*Id="([^"]+)"', rels)})
+    rid = dict(re.findall(r'<sheet [^>]*name="([^"]+)"[^>]*r:id="([^"]+)"', book))[sheet]
+    xml = z.read("xl/" + target[rid].lstrip("/").replace("xl/", "")).decode("utf-8", "replace")
+    out = {}
+    for attrs, inner in re.findall(r"<c ([^>]*?)(?:/>|>(.*?)</c>)", xml, re.S):
+        ref = re.search(r'r="([A-Z]+)(\d+)"', attrs)
+        if not ref:
+            continue
+        key = (ref.group(1), int(ref.group(2)))
+        v = re.search(r"<v>(.*?)</v>", inner or "")
+        if 't="s"' in attrs and v:
+            out[key] = strings[int(v.group(1))]
+        elif 't="inlineStr"' in attrs:
+            out[key] = re.sub(r"<[^>]+>", "", inner)
+        elif v and not strings_only:
+            out[key] = "#"
+    return out
+
+
+def xlsx_detail(body: bytes, sheets: list) -> str:
+    """Header rows (1-10) with cell refs, the last 6 column-A labels with the
+    columns that hold a number in that row (presence only), footnote rows."""
+    out = []
+    for sh in sheets:
+        try:
+            cells = xlsx_cells(body, sh, strings_only=False)
+        except KeyError:
+            out.append(f"{sh}: missing")
+            continue
+        head = [f"{c}{r}={v}" for (c, r), v in sorted(cells.items(), key=lambda x: (x[0][1], len(x[0][0]), x[0][0]))
+                if r <= 10 and v != "#"]
+        rows = sorted({r for _, r in cells})
+        a = [(r, cells[("A", r)]) for r in rows if ("A", r) in cells and cells[("A", r)] != "#"]
+        tail = []
+        periodish = [(r, lab) for r, lab in a if re.match(r"\d{4}", lab)]
+        tail.append("labels after the first 2025/2026 period: " + " | ".join(
+            repr(lab) for r, lab in periodish if lab[:4] in ("2025", "2026"))[:1200])
+        for r, lab in a[-8:]:
+            nums = "".join(c + "," for (c, rr), v in sorted(cells.items(), key=lambda x: (len(x[0][0]), x[0][0])) if rr == r and v == "#")
+            tail.append(f"r{r} {lab!r} numbers in [{nums}]")
+        out.append(f"{sh}: header: {' ; '.join(head)[:1500]}\n      last A: {' | '.join(tail)[:1500]}")
+    return "\n    ".join(out)
+
+
+def pdf_text(body: bytes) -> str:
+    """Crude text of a PDF: inflate each stream, collect (strings) shown with Tj/TJ."""
+    import zlib
+    parts = []
+    for m in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", body, re.S):
+        try:
+            data = zlib.decompress(m.group(1))
+        except zlib.error:
+            continue
+        for t in re.findall(rb"\[(.*?)\]\s*TJ|\((.*?)\)\s*Tj", data, re.S):
+            chunk = t[0] or t[1]
+            parts.append(b"".join(re.findall(rb"\(((?:\\.|[^\\)])*)\)", chunk)) if t[0] else chunk)
+    return b" ".join(parts).decode("latin-1", "replace")
+
+
+def xlsx_layout(body: bytes, max_sheets: int = 60) -> str:
+    """Per sheet: name, dimension, the title strings, column-A labels and the
+    header row -- from STRING cells only (t="s"); numeric cells are skipped."""
+    import io
+    import zipfile
+    try:
+        z = zipfile.ZipFile(io.BytesIO(body))
+    except zipfile.BadZipFile:
+        return "not a zip"
+    ss = z.read("xl/sharedStrings.xml").decode("utf-8", "replace") if "xl/sharedStrings.xml" in z.namelist() else ""
+    strings = [re.sub(r"<[^>]+>", "", x).strip() for x in re.findall(r"<si>(.*?)</si>", ss, re.S)]
+    book = z.read("xl/workbook.xml").decode("utf-8", "replace")
+    rels = z.read("xl/_rels/workbook.xml.rels").decode("utf-8", "replace")
+    target = dict(re.findall(r'Id="([^"]+)"[^>]*Target="([^"]+)"', rels))
+    target.update({k: v for v, k in re.findall(r'Target="([^"]+)"[^>]*Id="([^"]+)"', rels)})
+    out = []
+    for name, rid in re.findall(r'<sheet [^>]*name="([^"]+)"[^>]*r:id="([^"]+)"', book)[:max_sheets]:
+        path = "xl/" + target.get(rid, "").lstrip("/").replace("xl/", "")
+        try:
+            xml = z.read(path).decode("utf-8", "replace")
+        except KeyError:
+            out.append(f"{name}: (sheet file missing)")
+            continue
+        dim = (re.search(r'<dimension ref="([^"]+)"', xml) or [None, "?"])[1]
+        cells: dict[tuple[str, int], str] = {}
+        for ref, idx in re.findall(r'<c r="([A-Z]+\d+)"[^>]*t="s"[^>]*>\s*<v>(\d+)</v>', xml):
+            col, row = re.match(r"([A-Z]+)(\d+)", ref).groups()
+            cells[(col, int(row))] = strings[int(idx)] if int(idx) < len(strings) else "?"
+        rows = sorted({r for _, r in cells})
+        colA = [cells[("A", r)] for r in rows if ("A", r) in cells]
+        by_row = {r: [v for (c, rr), v in sorted(cells.items(), key=lambda x: (len(x[0][0]), x[0][0])) if rr == r] for r in rows[:15]}
+        head = max(by_row.values(), key=len, default=[])
+        out.append(f"{name} [{dim}] title: {' | '.join(colA[:3])[:200]}\n      A: {' | '.join(colA[3:40])[:900]}"
+                   f"\n      header: {' | '.join(head[:40])[:900]}")
+    return "\n    ".join(out)
 
 
 def release_files(reg: dict, name: str, page: bytes) -> list[tuple[str, str, list[str]]]:
@@ -310,6 +454,67 @@ def sentences(body: bytes, pattern: str, limit: int = 14) -> str:
     return "\n    ".join(dict.fromkeys(hits[:limit])) or "no matching sentences"
 
 
+CENSUS_PARTNERS = (r"TOTAL FOR ALL|EUROPEAN UNION|EURO AREA|CANADA|MEXICO|^CHINA$|JAPAN|UNITED KINGDOM|"
+                   r"KOREA|TAIWAN|SWITZERLAND|SINGAPORE|AUSTRALIA|GERMANY|INDIA|VIETNAM")
+
+
+EA_NOW = {"AUSTRIA", "BELGIUM", "BULGARIA", "CROATIA", "CYPRUS", "ESTONIA", "FINLAND", "FRANCE", "GERMANY",
+          "GREECE", "IRELAND", "ITALY", "LATVIA", "LITHUANIA", "LUXEMBOURG", "MALTA", "NETHERLANDS",
+          "PORTUGAL", "SLOVAKIA", "SLOVENIA", "SPAIN"}
+
+
+def ea_check(body: bytes) -> str:
+    """Per month: does EURO AREA equal the sum of today's members, or of the
+    members at the time (Croatia from 2023-01, Bulgaria from 2026-01)? Booleans only."""
+    rows = json.loads(body)
+    head = rows[0]
+    ci, ni, vi, ti = head.index("CTY_CODE"), head.index("CTY_NAME"), head.index("ALL_VAL_MO"), head.index("time")
+    by: dict[str, dict[str, float]] = {}
+    ea_code = next((r[ci] for r in rows[1:] if r[ni] == "EURO AREA"), None)
+    for r in rows[1:]:
+        if r[ni] in EA_NOW or r[ci] == ea_code:
+            by.setdefault(r[ti], {})[r[ni] if r[ci] != ea_code else "EA"] = float(r[vi] or 0)
+    found = sorted({n for v in by.values() for n in v} - {"EA"})
+    out = [f"EA code {ea_code}; members found {len(found)}/21: missing {sorted(EA_NOW - set(found))}"]
+    close = lambda a, b: abs(a - b) <= max(2.0, abs(b) * 1e-6)
+    for t in sorted(by):
+        v = by[t]
+        if "EA" not in v:
+            continue
+        today = sum(x for n, x in v.items() if n != "EA")
+        hr, bg = v.get("CROATIA", 0), v.get("BULGARIA", 0)
+        joined = {"ESTONIA": "2011-01", "LATVIA": "2014-01", "LITHUANIA": "2015-01", "CROATIA": "2023-01", "BULGARIA": "2026-01"}
+        at_time = sum(x for n, x in v.items() if n != "EA" and joined.get(n, "0") <= t)
+        variants = {"all 21": today, "without BG": today - bg, "at the time": at_time,
+                    "at the time + HR": at_time + (hr if t < "2023-01" else 0)}
+        out.append(f"{t}: " + ", ".join(f"{k} {close(v['EA'], x)}" for k, x in variants.items()))
+    return "; ".join(out)
+
+
+def ita_params(body: bytes, pattern: str) -> str:
+    try:
+        vals = json.loads(body)["BEAAPI"]["Results"]["ParamValue"]
+    except (ValueError, KeyError, TypeError):
+        return f"unexpected: {mask(body[:200].decode('utf-8', 'replace'))}"
+    hits = [f"{v.get('Key')}: {v.get('Desc')}" for v in vals
+            if not pattern or re.search(pattern, str(v.get("Key")))]
+    return f"{len(vals)} values; " + "; ".join(hits)[:6000]
+
+
+def ita_rows(body: bytes) -> str:
+    try:
+        res = json.loads(body)["BEAAPI"]["Results"]
+        data = res.get("Data", []) if isinstance(res, dict) else []
+    except (ValueError, KeyError, TypeError):
+        return f"unexpected: {mask(body[:300].decode('utf-8', 'replace'))}"
+    if not data:
+        return f"no data: {mask(json.dumps(res)[:400])}"
+    areas = sorted({d.get("AreaOrCountry") for d in data})
+    periods = sorted({d.get("TimePeriod") for d in data})
+    return (f"{len(data)} rows, areas {areas}, periods {periods[0]}..{periods[-1]}, "
+            f"fields {sorted(data[0])}")
+
+
 def csv_dates(body: bytes) -> str:
     """First column date span of a CSV with any date format (SONIA IADB: 02 Jan 1997)."""
     rows = [l.split(",")[0].strip().strip('"') for l in body.decode("utf-8-sig", "replace").splitlines()[1:] if l.strip()]
@@ -457,6 +662,14 @@ def main() -> int:
                                  .replace("cftczip", "cftc").replace("fredcal", "fred"), {})
         if label.startswith(("corra", "sonia")):
             src = {}
+        if label.startswith("census:") and not label.startswith(("census:partners", "census:span", "census:multi", "census:eacheck")):
+            src = {}
+        if label.startswith("beahist"):
+            src = {}
+        if label.startswith("beameta"):
+            src = reg["sources"]["bea"]
+        if label.startswith("census:"):
+            src = reg["sources"]["census"]
         creds = auth(src)
         if creds is None:
             lines.append(f"| {label} | needs secret {src['secret']} (not set; not requested) | | | | | |")
@@ -486,6 +699,8 @@ def main() -> int:
                 sheets, labels = got
                 text = "\n".join(labels)
                 missing = [e for e in expect if e not in text]
+                details.append(f"- {flabel} detail (strings; numbers as presence only):\n    "
+                               + xlsx_detail(fbody, ["Table 1", "Table 2", "Table 3", "Table 7"]))
                 details.append(f"- {flabel}: {furl.rsplit('/', 1)[-1]}, {len(sheets)} sheets, "
                                f"expected labels {len(expect) - len(missing)}/{len(expect)}"
                                + (f", MISSING: {missing}" if missing else ""))
@@ -499,6 +714,71 @@ def main() -> int:
                 release_dates.setdefault(rid, []).extend(cal_fred.parse(body, rid))
             except Exception as e:  # layout change: say so, keep probing
                 details.append(f"- {label}: {type(e).__name__}")
+        if label == "beameta:areas" and body:
+            details.append(f"- ITA areas (Key: Desc): {ita_params(body, '')}")
+        if label == "beameta:indicators" and body:
+            details.append(f"- ITA indicators (goods/services/balance): {ita_params(body, r'Gds|Serv|Bal|Goods|Services')}")
+        if label == "beameta:multi" and body:
+            details.append(f"- ITA multi-area call: {ita_rows(body)}")
+        if label == "census:partners" and body:
+            details.append(f"- census partners: {census_rows(body, CENSUS_PARTNERS)}")
+        if label.startswith("beahist:") and body:
+            pub = re.search(rb'<time[^>]*datetime="(\d{4}-\d{2}-\d{2})', body)
+            if not pub:
+                pub = re.search(rb"((?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, 20\d\d)", body)
+            details.append(f"- {label}: published {pub.group(1).decode() if pub else '?'}")
+            m = re.search(rb'href="([^"]*trad\d{4}[^"]*geo-time-series[^"]*\.xlsx)"', body)
+            if not m:
+                details.append(f"- {label}: geo workbook link not found")
+            else:
+                url = m.group(1).decode()
+                url = url if url.startswith("http") else "https://www.bea.gov" + url
+                time.sleep(1)
+                _, wb = probe(url)
+                try:
+                    cells = xlsx_cells(wb, "Table 1")
+                    per = [v for (c, r), v in sorted(cells.items(), key=lambda x: x[0][1]) if c == "A" and re.fullmatch(r"\d{4} [1-4]", v)]
+                    details.append(f"- {label}: {url.rsplit('/', 1)[-1]} latest quarter {per[-1] if per else 'none'}")
+                except Exception as e:
+                    details.append(f"- {label}: {type(e).__name__}")
+        if label.startswith("census:eacheck") and body:
+            try:
+                details.append(f"- census euro-area composition: {ea_check(body)}")
+            except (ValueError, IndexError, KeyError) as e:
+                details.append(f"- census eacheck: {type(e).__name__}")
+        if label == "census:multi" and body:
+            try:
+                t = json.loads(body)
+                details.append(f"- census multi-code: header {t[0]}, {len(t) - 1} rows, "
+                               f"codes {sorted({r[0] for r in t[1:]})}, months {sorted({r[-1] for r in t[1:]})}")
+            except (ValueError, IndexError, TypeError):
+                details.append(f"- census multi-code: not a table ({mask(body[:120].decode('utf-8', 'replace'))})")
+        if label == "census:ea-notice" and body:
+            details.append(f"- census EA notice text: {pdf_text(body)[:1500]}")
+        if label in ("census:groupings", "census:statsinfo") and body:
+            details.append(f"- {label} excerpts:\n    {sentences(body, r'Euro Area|euro area|European Union|historical|revis', 20)}")
+        if label == "beameta:error" and body:
+            def paths(o, p="$"):
+                if isinstance(o, dict):
+                    return [x for k, v in o.items() for x in paths(v, f"{p}.{k}")]
+                if isinstance(o, list):
+                    return [x for v in o[:2] for x in paths(v, p + "[]")]
+                return [p]
+            try:
+                doc = json.loads(body)
+                details.append(f"- ITA error JSON key paths (no values): {paths(doc)}")
+                err = json.dumps(doc)
+                details.append(f"- ITA error echoes the key: {os.environ.get('BEA_API_KEY', '#') in err}")
+            except ValueError:
+                details.append("- ITA error: not json")
+        if label == "beameta:years" and body:
+            details.append(f"- ITA year list + EU: {ita_rows(body)}")
+        if label == "census:span" and body:
+            try:
+                t = [r[-1] for r in json.loads(body)[1:]]
+                details.append(f"- census KR exports months: {len(t)}, {min(t)}..{max(t)}")
+            except (ValueError, IndexError, TypeError):
+                details.append(f"- census span: not a table ({body[:80]!r})")
         if label in TERMS and body:
             details.append(f"- {label} terms excerpts:\n    {sentences(body, TERMS[label])}")
         if label == "corra:full" and body:

@@ -25,15 +25,18 @@ Fetcher = Callable[[Ctx], list[Observation]]
 
 
 def fetchers() -> dict[str, Fetcher]:
-    from .sources import boc, boe, boj, cboe, cftc, ecb, fred, mas, nyfed, rba, snb, treasury
+    from .sources import (bea_ita, bea_release, boc, boe, boj, cboe, census, cftc, ecb, fred, mas,
+                          nyfed, rba, snb, treasury)
     return {"fred": fred.fetch, "treasury": treasury.fetch, "nyfed": nyfed.fetch,
             "ecb": ecb.fetch, "snb": snb.fetch, "boj": boj.fetch, "rba": rba.fetch,
             "mas": mas.fetch, "cboe": cboe.fetch, "cftc": cftc.fetch,
-            "boc": boc.fetch, "boe": boe.fetch}
+            "boc": boc.fetch, "boe": boe.fetch, "bea_release": bea_release.fetch,
+            "census": census.fetch, "bea": bea_ita.fetch}
 
 
 def collect(reg: Registry, uses: str, http: Http, since: date | dict[str, date],
-            today: date | None = None, table: dict[str, Fetcher] | None = None) -> list[SourceResult]:
+            today: date | None = None, table: dict[str, Fetcher] | None = None,
+            role: str = "deliver") -> list[SourceResult]:
     """Fetch every active series of the selected use cases, source by source,
     one registry series at a time (each with its own start date).
 
@@ -42,11 +45,12 @@ def collect(reg: Registry, uses: str, http: Http, since: date | dict[str, date],
     fails, the rows already fetched are kept, the remaining series are still
     tried, and the source is `error` naming the failures.
     `since` is one date, or a mapping keyed by registry series id (or source).
+    `role` picks delivered series (default) or cross-check series.
     """
     today = today or datetime.now(timezone.utc).date()
     table = fetchers() if table is None else table
     results = []
-    for source, series in sorted(reg.by_source(reg.select(uses)).items()):
+    for source, series in sorted(reg.by_source(reg.select(uses, role=role)).items()):
         fn = table.get(source)
         if fn is None:
             results.append(SourceResult(source, "error", "no fetcher for this source yet", _now()))
