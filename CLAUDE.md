@@ -19,7 +19,9 @@ imports it. Read `docs/ALMANAC_SPEC.md` before any work.
 3. **No secrets in code, docs, logs or workflow files.** Tokens, API keys and
    contact strings live only in GitHub Actions secrets that the owner adds
    through GitHub settings. Never ask for a secret in chat. Never print a
-   secret, even masked, in a workflow log.
+   secret's value, even partially, in a workflow log. GitHub's own `***`
+   placeholder for a secret passed to a step is fine (it only shows that the
+   secret exists).
 4. **Official/public sources only**, accessed the way their terms allow. No
    scraping of commercial calendar or data sites. Be polite: one request at
    a time per host, a clear User-Agent, backoff on 429/5xx.
