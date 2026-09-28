@@ -63,7 +63,10 @@ def geo_release_for(month: date) -> date:
 
 
 def period_date(label: str) -> str | None:
-    """"1992 Jan" -> 1992-01-01; "1999 2" -> 1999-04-01; anything else None."""
+    """"1992 Jan" -> 1992-01-01; "1999 2" -> 1999-04-01; anything else None.
+    Revised periods carry a marker ("2026 Jan (R)", "2026 1 (R)"; probe
+    2026-09-28), which is dropped."""
+    label = re.sub(r"\s*\((?:R|P)\)$", "", label.strip())
     m = re.fullmatch(r"(\d{4}) ([A-Za-z]{3})", label)
     if m:
         try:

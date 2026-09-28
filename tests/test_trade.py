@@ -163,6 +163,12 @@ def test_page_without_workbook_links_is_an_error():
 
 # ---- workbook contents ---------------------------------------------------------------
 
+def test_revised_period_marker_is_dropped():
+    assert bea_release.period_date("2026 Jan (R)") == "2026-01-01"
+    assert bea_release.period_date("2026 1 (R)") == "2026-01-01"
+    assert bea_release.period_date("(R) Revised") is None
+
+
 def test_table1_groups_by_label_monthly_dating_annual_rows_skipped():
     obs = bea_release.fetch(ctx("TRADE_BEA_M", Web()))
     got = {(o.series_id, o.obs_date): o.value for o in obs}

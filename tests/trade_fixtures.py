@@ -88,7 +88,7 @@ def time_series(last=(2026, 7), unit="[Millions of dollars, months seasonally ad
     t1.update({(10, c): 999999.0 for c in range(2, 11)})  # annual row: never delivered
     r = 12
     for y, m in months(last):
-        t1[(r, 1)] = f"{y} {MONTHS[m - 1]}"
+        t1[(r, 1)] = f"{y} {MONTHS[m - 1]}" + (" (R)" if (y, m) == (last[0], last[1] - 1) else "")
         for c in range(2, 11):
             t1[(r, c)] = value("t1", y, m, c)
         r += 1
@@ -103,7 +103,7 @@ def time_series(last=(2026, 7), unit="[Millions of dollars, months seasonally ad
             t[(7, i)] = name
         r = 11
         for y, m in [(1999, 1)] + months(last)[2:]:
-            t[(r, 1)] = f"{y} {MONTHS[m - 1]}"
+            t[(r, 1)] = f"{y} {MONTHS[m - 1]}" + (" (R)" if (y, m) == (last[0], last[1] - 1) else "")
             for c in range(2, len(cats) + 3):
                 t[(r, c)] = value(f"t{n}", y, m, c)
             r += 1
@@ -122,7 +122,7 @@ def geo(last_quarter=(2026, 2), partners=PARTNERS, unit="[Millions of dollars, q
             t[(6, i)] = p
         r = 10
         for y, q in quarters:
-            t[(r, 1)] = f"{y} {q}"
+            t[(r, 1)] = f"{y} {q}" + (" (R)" if (y, q) == quarters[-2] else "")
             for i, p in enumerate(partners, 2):
                 t[(r, i)] = "n.a." if (p == "Vietnam" and y == 1999) else value("geo", n, y, q, p)
             r += 1
