@@ -14,6 +14,10 @@
 #   max_age_days   freshness limit (default by freq: daily 4, weekly 10, monthly 45, quarterly 120)
 #   lookback_days  revision re-fetch window (default by freq: daily 30, weekly 90,
 #                  monthly 400, quarterly 800)
+#   backfill       first-delivery depth: "full" (everything the source has) or a
+#                  number of days (default 365)
+#   per_key        per-key overrides of freq / max_age_days / lookback_days, e.g.
+#                  weekly codes inside an otherwise daily series
 #
 # url templates: {key} registry key, {since} earliest date wanted (YYYY-MM-DD),
 # {n} number of days wanted, {year}/{prev_year} calendar years.
@@ -248,22 +252,28 @@ redistribution = "restricted"  # owner decision 2026-09-28: MAS API terms not re
 [[series]]
 id = "VOL_INDEX"
 source = "cboe"
-key = ["VIX", "VIX3M", "VVIX"]
+key = ["VIX", "VIX3M", "VVIX"]  # VIX first: the CBOE canary
 freq = "daily"
-units = "index points (OHLC; deliver close as value, keep OHLC in a later version if needed)"
+units = "index points (daily close)"
 use = "C"
 status = "active"
 redistribution = "restricted"
+backfill = "full"  # VIX from 1990, VVIX from 2006, VIX3M from 2009
 
 [[series]]
 id = "REGIME_FRED"
 source = "fred"
 key = ["T10Y3M", "T10Y2Y", "NFCI", "ICSA"]
-freq = "mixed (daily/weekly per key)"
-units = "per FRED"
+freq = "daily"  # T10Y3M, T10Y2Y; the weekly codes are set per key below
+units = "per FRED (percentage points; NFCI index; ICSA claims)"
 use = "C"
 status = "active"
 redistribution = "open"
+backfill = "full"
+# NFCI: weekly (Friday), released Wednesdays and re-estimated each week.
+# ICSA: weekly (week ending Saturday), released Thursdays. Both are up to ~12
+# days old just before a release (probe 2026-09-28: 10 and 9 days).
+per_key = { NFCI = { freq = "weekly", max_age_days = 14 }, ICSA = { freq = "weekly", max_age_days = 14 } }
 
 [[series]]
 id = "USD_INDEX"
@@ -276,6 +286,10 @@ units = "index, Jan 2006 = 100"
 use = "C"
 status = "active"  # all three probed 200 CSV from runners 2026-09-28
 redistribution = "open"
+backfill = "full"
+# Daily values published weekly (Mondays, H.10): up to 10 days old before the
+# release (probe 2026-09-28), 11 when a Monday holiday moves it to Tuesday.
+max_age_days = 12
 
 # ---- D. Event calendar -------------------------------------------------------
 # Calendar entries: one per calendar source. `kind` (cb_decision | release),

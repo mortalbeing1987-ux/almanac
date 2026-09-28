@@ -14,7 +14,7 @@ on:
     inputs:
       uses:
         description: "use-case tags to collect"
-        default: "ABD"
+        default: "ABCD"
 
 permissions:
   contents: read
@@ -54,7 +54,7 @@ jobs:
       - name: Deliver (status only, no values logged)
         env:
           MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
-          USES: ${{ inputs.uses || 'ABD' }}
+          USES: ${{ inputs.uses || 'ABCD' }}
         run: |
           case "$USES" in *[!A-G]*|"") echo "::error::uses must be letters A-G"; exit 1;; esac
           python -m almanac deliver --data-dir data-repo --uses "$USES"

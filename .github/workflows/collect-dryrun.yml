@@ -32,5 +32,5 @@ jobs:
         env:
           MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
         run: |
-          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses ABD
-          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses ABD
+          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses ABCD
+          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses ABCD

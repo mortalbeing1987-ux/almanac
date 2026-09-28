@@ -17,7 +17,7 @@ from pathlib import Path
 from . import calendar, freshness, state as state_mod
 from .bundle import assign_revisions, run_id_for, write_macro_bundle
 from .http import Http
-from .registry import Registry, delivered_id, keys
+from .registry import Registry, delivered_id, key_settings, keys
 from .run import collect
 
 # Re-fetch window, by frequency, so revisions to already-delivered values are
@@ -25,30 +25,39 @@ from .run import collect
 # revised much further back (payroll benchmarks, annual trade revisions).
 # A series can override with `lookback_days` in the registry.
 LOOKBACK_DAYS = {"daily": 30, "weekly": 90, "monthly": 400, "quarterly": 800}
-DEFAULT_LOOKBACK = 30  # frequencies not listed above (e.g. "mixed")
-BACKFILL_DAYS = 365  # first delivery of a series goes this far back
+DEFAULT_LOOKBACK = 30  # frequencies not listed above
+BACKFILL_DAYS = 365  # default first-delivery depth; a series can set `backfill`
+FULL_HISTORY = date(1900, 1, 1)  # backfill = "full": ask the source for everything
 
 
-def lookback_days(series: dict) -> int:
-    return int(series.get("lookback_days", LOOKBACK_DAYS.get(series["freq"], DEFAULT_LOOKBACK)))
+def lookback_days(series: dict, key: str | None = None) -> int:
+    ks = key_settings(series, key)
+    return int(ks.get("lookback_days", LOOKBACK_DAYS.get(ks.get("freq", ""), DEFAULT_LOOKBACK)))
 
 
-def since_by_source(selected: list[dict], st: state_mod.State, today: date,
+def backfill_start(series: dict, today: date, default: int = BACKFILL_DAYS) -> date:
+    """First-delivery horizon: `backfill = "full"` or a number of days (default 365)."""
+    b = series.get("backfill", default)
+    return FULL_HISTORY if b == "full" else today - timedelta(days=int(b))
+
+
+def since_by_series(selected: list[dict], st: state_mod.State, today: date,
                     backfill: int = BACKFILL_DAYS) -> dict[str, date]:
-    """Earliest date to fetch per source: for each series, its oldest 'last
-    delivered' minus its own look-back; a series never delivered pulls the
-    source back to the backfill horizon. A source takes the earliest of its series."""
+    """Earliest date to fetch, per registry series: for each key, its last
+    delivered date minus that key's own look-back (weekly codes look back
+    further than daily ones); a key never delivered pulls the series back to
+    its backfill horizon. The series takes the earliest of its keys. Being per
+    series, one series' full backfill never re-pulls another series' history."""
     out: dict[str, date] = {}
     for s in selected:
-        lasts = [st.last_obs(delivered_id(s, k)) for k in keys(s)]
+        pairs = [(k, st.last_obs(delivered_id(s, k))) for k in keys(s)]
         if s["source"] == "treasury":  # tenor ids aren't known up front
-            lasts = [m.get("last_obs") for sid, m in st.series.items()
-                     if sid.startswith(s["id"] + "_")] or [None]
-        if any(v is None for v in lasts):
-            start = today - timedelta(days=backfill)
-        else:
-            start = date.fromisoformat(min(lasts)) - timedelta(days=lookback_days(s))
-        out[s["source"]] = min(out.get(s["source"], start), start)
+            pairs = [(None, m.get("last_obs")) for sid, m in st.series.items()
+                     if sid.startswith(s["id"] + "_")] or [(None, None)]
+        starts = [backfill_start(s, today, backfill) if last is None
+                  else date.fromisoformat(last) - timedelta(days=lookback_days(s, k if isinstance(s["key"], list) else None))
+                  for k, last in pairs]
+        out[s["id"]] = min(starts)
     return out
 
 
@@ -62,7 +71,7 @@ def run(reg: Registry, data_dir: Path, uses: str, http: Http | None = None,
     macro_uses = uses.replace("D", "")
     st = state_mod.load(data_dir)
     selected = reg.select(macro_uses) if macro_uses else []
-    since = since_by_source(selected, st, today)
+    since = since_by_series(selected, st, today)
     results = collector(reg, macro_uses, http, since, today) if macro_uses else []
 
     rows = assign_revisions(results, st.delivered)
@@ -94,11 +103,13 @@ def run(reg: Registry, data_dir: Path, uses: str, http: Http | None = None,
         "uses": uses,
         "bundle": bundle.name if bundle else None,
         "rows_delivered": len(rows),
+        "revisions_delivered": sum(1 for r in rows if r["revision"] > 0),
         "cal_bundle": cal_bundle.name if cal_bundle else None,
         "events_delivered": len(cal_rows),
         "sources": {r.source: {"status": r.status, "reason": r.reason,
                                "observations": len(r.observations),
-                               "since": since.get(r.source, today).isoformat()}
+                               "since": min((since[s["id"]] for s in selected if s["source"] == r.source),
+                                            default=today).isoformat()}
                     for r in results},
         "calendar_sources": {r.source: _cal_source_status(r) for r in cal_results},
         "freshness": fresh,
