@@ -97,7 +97,9 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
                             f"https://www.bea.gov/news/{py}/us-international-trade-goods-and-services-{months[m - 1]}-{yr}"))
     # euro-area composition: EA vs the sum of its members, picked by name (booleans only)
     out.append(("census:eacheck", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
-                "&time=from+2022-11"))
+                "&time=from+2010-01+to+2010-02"))
+    out.append(("census:eacheck2", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
+                "&time=from+2022-10+to+2023-02"))
     cen2 = ("https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
             "&time=from+2026-04&CTY_CODE=-&CTY_CODE=0025&CTY_CODE=6021")
     out.append(("census:multi", cen2))
@@ -475,8 +477,9 @@ def ea_check(body: bytes) -> str:
         if "EA" not in v:
             continue
         today = sum(x for n, x in v.items() if n != "EA")
-        at_time = today - (0 if t >= "2023-01" else v.get("CROATIA", 0)) - (0 if t >= "2026-01" else v.get("BULGARIA", 0))
-        out.append(f"{t}: today's {close(v['EA'], today)}, at-the-time {close(v['EA'], at_time)}")
+        hr, bg = v.get("CROATIA", 0), v.get("BULGARIA", 0)
+        variants = {"all 21": today, "without BG": today - bg, "without HR": today - hr, "without HR+BG": today - hr - bg}
+        out.append(f"{t}: " + ", ".join(f"{k} {close(v['EA'], x)}" for k, x in variants.items()))
     return "; ".join(out)
 
 
@@ -730,7 +733,7 @@ def main() -> int:
                     details.append(f"- {label}: {url.rsplit('/', 1)[-1]} latest quarter {per[-1] if per else 'none'}")
                 except Exception as e:
                     details.append(f"- {label}: {type(e).__name__}")
-        if label == "census:eacheck" and body:
+        if label.startswith("census:eacheck") and body:
             try:
                 details.append(f"- census euro-area composition: {ea_check(body)}")
             except (ValueError, IndexError, KeyError) as e:
