@@ -20,4 +20,5 @@ jobs:
           # Owner-added Actions secret; the probe only puts it in a request
           # header and never prints it. Empty if not set -> MAS is skipped.
           MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
+          BEA_API_KEY: ${{ secrets.BEA_API_KEY }}
         run: python scripts/probe_sources.py

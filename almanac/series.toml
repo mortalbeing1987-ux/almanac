@@ -54,6 +54,32 @@ secret = "MAS_API_KEY"
 auth_header = "KeyId"
 note = "keyless routes are gone; keyed call returns full history as JSON (~6.8 MB, ~18 s) -- filter by date in the fetcher"
 
+# TBD sources: `candidates` are probed by scripts/probe_sources.py; the one that
+# works from GitHub's runners becomes `url`.
+[sources.bea]
+url = "TBD"
+# BEA API: free key, stored ONLY as Actions secret BEA_API_KEY, sent as the
+# UserID query parameter. Probe: catalog (datasets, ITA frequencies,
+# indicators, countries), then one quarterly Korea goods+services call.
+secret = "BEA_API_KEY"
+auth_param = "UserID"
+candidates = [
+  "https://apps.bea.gov/api/data?method=GetDataSetList&ResultFormat=JSON",
+  "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ParameterName=Frequency&ResultFormat=JSON",
+  "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ParameterName=Indicator&ResultFormat=JSON",
+  "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ParameterName=AreaOrCountry&ResultFormat=JSON",
+  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Indicator=ExpGdsServ&AreaOrCountry=Korea&Frequency=QSA&Year=2025&ResultFormat=JSON",
+]
+
+[sources.census]
+url = "TBD"
+# Census international trade API (goods by country; HS/NAICS detail later).
+# Keyless at low volume. Probe: South Korea (CTY_CODE 5800), one month.
+candidates = [
+  "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO&time=2026-06&CTY_CODE=5800",
+  "https://api.census.gov/data/timeseries/intltrade/imports/hs?get=CTY_CODE,CTY_NAME,GEN_VAL_MO&time=2026-06&CTY_CODE=5800",
+]
+
 # ---- A. Curve & credit -------------------------------------------------------
 [[series]]
 id = "UST_PAR_CURVE"

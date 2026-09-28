@@ -34,7 +34,7 @@ def test_keyed_sources_name_their_secret_and_header():
     for name, src in REG["sources"].items():
         if "secret" in src:
             assert src["secret"].isupper() and src["secret"].endswith("_API_KEY"), name
-            assert src.get("auth_header"), name
+            assert src.get("auth_header") or src.get("auth_param"), name
 
 
 def test_no_source_key_listed_twice():

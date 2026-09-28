@@ -9,11 +9,14 @@ data itself, so the public workflow log carries no restricted values.
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import sys
 import time
 import tomllib
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import date
 from pathlib import Path
@@ -61,7 +64,42 @@ MARKERS = {
     "boj": "STRDCLUCON",
     "rba": "FIRMMCRTD",
     "mas": "sora",
+    "bea?4": "Korea",
+    "bea?5": "DataValue",
+    "census?1": "5800",
+    "census?2": "5800",
 }
+
+# Catalog/metadata calls: list the distinct values of one JSON field (dataset,
+# frequency, indicator or country NAMES) matching a filter. Never data values.
+LISTS = {
+    "bea?1": ("DatasetName", ""),
+    "bea?2": ("Key", ""),
+    "bea?3": ("Key", "Gds|Serv"),
+    "bea?4": ("Key", "Korea|Taiwan|Vietnam|Singapore|Switzerland|India|China|Japan|Canada|Mexico|Kingdom|Germany|Euro"),
+}
+
+
+def list_values(body: bytes, field: str, pattern: str) -> str:
+    try:
+        doc = json.loads(body)
+    except ValueError:
+        return "not json"
+    seen: dict[str, None] = {}
+
+    def walk(o: object) -> None:
+        if isinstance(o, dict):
+            v = o.get(field)
+            if isinstance(v, str) and (not pattern or re.search(pattern, v)):
+                seen[v] = None
+            for x in o.values():
+                walk(x)
+        elif isinstance(o, list):
+            for x in o:
+                walk(x)
+
+    walk(doc)
+    return ", ".join(seen)[:1500] or "none"
 
 
 def sniff(body: bytes) -> str:
@@ -80,22 +118,32 @@ def sniff(body: bytes) -> str:
     return "other"
 
 
-def auth_headers(src: dict) -> dict[str, str] | None:
-    """Header carrying a source's API key, read from the Actions secret's env var.
+def auth(src: dict) -> tuple[dict[str, str], dict[str, str]] | None:
+    """(headers, query params) carrying a source's API key from its secret's env var.
 
-    None means the source needs a secret that is not set. The key is only ever
-    placed in the request header -- never printed, logged or returned elsewhere.
+    A source names `auth_header` (key sent as a header) or `auth_param` (key
+    sent as a query parameter). None means the needed secret is not set. The
+    key only ever goes into the request -- never printed or logged (the probe
+    prints labels, not URLs).
     """
     secret = src.get("secret")
     if not secret:
-        return {}
+        return {}, {}
     key = os.environ.get(secret, "")
-    return {src["auth_header"]: key} if key else None
+    if not key:
+        return None
+    if "auth_param" in src:
+        return {}, {src["auth_param"]: key}
+    return {src["auth_header"]: key}, {}
 
 
-def probe(url: str, marker: str = "", extra: dict[str, str] | None = None) -> tuple[str, ...]:
+def probe(url: str, marker: str = "", headers: dict[str, str] | None = None,
+          params: dict[str, str] | None = None) -> tuple[tuple[str, ...], bytes]:
+    """(table cells, body). The body is only inspected, never printed."""
+    if params:
+        url += ("&" if "?" in url else "?") + urllib.parse.urlencode(params)
     t0 = time.monotonic()
-    req = urllib.request.Request(url, headers={"User-Agent": UA, **(extra or {})})
+    req = urllib.request.Request(url, headers={"User-Agent": UA, **(headers or {})})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             body = r.read()
@@ -106,26 +154,31 @@ def probe(url: str, marker: str = "", extra: dict[str, str] | None = None) -> tu
         status, ctype, body = f"ERR {type(e).__name__}", "", b""
     found = ("yes" if marker.lower().encode() in body.lower() else "no") if marker else ""
     return (status, f"{len(body):,}", ctype.split(";")[0], sniff(body),
-            f"{marker} {found}".strip(), f"{time.monotonic() - t0:.1f}s")
+            f"{marker} {found}".strip(), f"{time.monotonic() - t0:.1f}s"), body
 
 
 def main() -> int:
     reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
     lines = ["| source | status | bytes | type | body | marker | time |",
              "|---|---|---|---|---|---|---|"]
+    details: list[str] = []
     for label, url in probe_urls(reg):
         if not url:
             lines.append(f"| {label} | TBD (no url yet) | | | | | |")
             continue
         src = reg["sources"].get(label.split("?")[0].split(":")[0], {})
-        extra = auth_headers(src)
-        if extra is None:
+        creds = auth(src)
+        if creds is None:
             lines.append(f"| {label} | needs secret {src['secret']} (not set; not requested) | | | | | |")
             continue
-        lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(
-            label, *probe(url, MARKERS.get(label, ""), extra)))
+        cells, body = probe(url, MARKERS.get(label, ""), *creds)
+        lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
+        if label in LISTS:
+            details.append(f"- {label}: {list_values(body, *LISTS[label])}")
         time.sleep(1)  # one request at a time, politely
     table = "\n".join(lines)
+    if details:
+        table += "\n\nMetadata (names only):\n" + "\n".join(details)
     print(table)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
