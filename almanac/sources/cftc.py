@@ -3,7 +3,8 @@
   deafut.txt            latest report; no header, 129 comma-separated columns
   deacot<year>.zip      one per year from 1986: annual.txt, same columns with a header
 
-Columns used (0-based, identical in both): 1 as-of date YYMMDD, 2 as-of date
+Older yearly files (before ~2015) pad fields with spaces and name the member
+Annual.TXT. Columns used (0-based, identical in all): 1 as-of date YYMMDD, 2 as-of date
 YYYY-MM-DD, 3 CFTC contract market code, 7 open interest (all), 8/9
 non-commercial long/short (all). The zips' header names are checked; in the
 headerless weekly file the two date columns must agree. obs_date is the
@@ -37,9 +38,10 @@ MEASURES = {"NC_LONG": lambda oi, lo, sh: lo, "NC_SHORT": lambda oi, lo, sh: sh,
 def parse(lines, codes: set[str], header: bool) -> Positions:
     lines = iter(lines)
     head_line = next(lines, "") if header else None
-    marks = tuple(f",{c}," for c in codes)
-    # other markets' rows are skipped before CSV parsing (the full history is ~600k rows)
-    reader = csv.reader(line for line in lines if any(m in line for m in marks))
+    # Other markets' rows are skipped before CSV parsing (the full history is
+    # ~600k rows). Only the bare code is looked for: files before ~2015 pad
+    # every field ("092741 ,"); the exact match is on the parsed column below.
+    reader = csv.reader(line for line in lines if any(c in line for c in codes))
     if header:
         head = [h.strip() for h in next(csv.reader([head_line]), [])]
         for i, name in HEADER.items():

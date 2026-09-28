@@ -46,6 +46,8 @@ class Cftc:
         year = int(url.rsplit("deacot", 1)[1][:4])
         if year in self.missing:
             raise FetchError("error", "HTTP 404 from www.cftc.gov/files/dea/history/x.zip")
+        if year == 1990:  # older layout: padded fields, member Annual.TXT
+            return zipped("cftc_annual_1990.txt", member="Annual.TXT")
         return zipped("cftc_annual_2026.txt" if year == 2026 else "cftc_annual_2025.txt")
 
 
@@ -91,6 +93,18 @@ def test_cot_full_backfill_reads_every_year_from_1986():
     years = [int(u.rsplit("deacot", 1)[1][:4]) for u in http.calls if u.endswith(".zip")]
     assert years == list(range(1986, 2027))
     assert http.calls[-1].endswith("deafut.txt")
+
+
+def test_cot_old_padded_layout_is_read_not_skipped():
+    # before ~2015 every field is space-padded ("092741 ,") -- a strict ",092741,"
+    # match would silently drop those years
+    got = cftc.parse_zip(zipped("cftc_annual_1990.txt", member="Annual.TXT"), CODES)
+    assert {c for c, _ in got} == CODES - {"099741"}  # no Euro FX before 1999
+    assert got[("092741", "1990-01-15")] == (15312.0, 5104.0, 1701.0)
+    assert got[("092741", "1990-01-30")] == (15309.0, 5103.0, 1701.0)
+    obs = cftc.fetch(cot_ctx(Cftc(), date(1900, 1, 1)))
+    assert values(obs, "COT_FX_CHF_NC_NET")["1990-01-15"] == 5104 - 1701
+    assert "1990-01-15" not in values(obs, "COT_FX_EUR_OI")
 
 
 def test_cot_yearly_zip_header_change_is_an_error():
@@ -199,7 +213,7 @@ def test_deliver_e_twice_second_pass_delivers_nothing(tmp_path):
     first = deliver.run(REG, tmp_path, "E", Both(), now)
     assert first["sources"]["cftc"]["status"] == "ok" and first["sources"]["snb"]["status"] == "ok"
     assert first["sources"]["cftc"]["since"] == "1900-01-01"
-    assert first["rows_delivered"] == 24 * 4 + 5 and first["revisions_delivered"] == 0
+    assert first["rows_delivered"] == 24 * 4 + 5 * 2 * 4 + 5 and first["revisions_delivered"] == 0
     assert first["freshness"]["stale"] == []
     again = deliver.run(REG, tmp_path, "E", Both(), now)
     assert again["rows_delivered"] == 0 and again["bundle"] is None
