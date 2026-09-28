@@ -18,7 +18,7 @@ import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 REGISTRY = Path(__file__).resolve().parents[1] / "almanac" / "series.toml"
@@ -30,6 +30,8 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     """(label, url) pairs: one per source, plus one per FRED key family."""
     out: list[tuple[str, str]] = []
     year = date.today().year
+    fmt = {"year": year, "prev_year": year - 1, "n": 5,
+           "since": (date.today() - timedelta(days=14)).isoformat()}
     first_key: dict[str, str] = {}
     for s in reg.get("series", []):
         k = s["key"][0] if isinstance(s["key"], list) else s["key"]
@@ -50,7 +52,7 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
         key = first_key.get(name, "")
         if name == "cboe":
             key = "VIX"
-        out.append((name, url.format(key=key, year=year)))
+        out.append((name, url.format(key=key, **fmt)))
     # candidate keys on sources that already have a url (e.g. SARON on snb)
     # sources whose series have `areas`: one probe per (key, area)
     for s in reg.get("series", []):
@@ -59,14 +61,14 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
             for k in s["key"]:
                 for a in s["areas"]:
                     out.append((f"{s['source']}:{k}:{a}",
-                                url.format(key=k, area=a, year=year, prev_year=year - 1)))
+                                url.format(key=k, area=a, **fmt)))
     for s in reg.get("series", []):
         for c in s.get("candidates", []):
             url = reg["sources"][s["source"]]["url"]
-            out.append((f"{s['id']}?{c}", url.format(key=c, year=year)))
+            out.append((f"{s['id']}?{c}", url.format(key=c, **fmt)))
     # a few extra FRED probes so a partial block is visible
     for k in ("BAMLH0A0HYM2", "BAMLC0A4CBBB", "DFII10", "T10Y3M", "DTWEXBGS", "DTWEXAFEGS", "DTWEXEMEGS", "ICSA", "NFCI", "CPIAUCSL"):
-        out.append((f"fred:{k}", reg["sources"]["fred"]["url"].format(key=k)))
+        out.append((f"fred:{k}", reg["sources"]["fred"]["url"].format(key=k, **fmt)))
     return out
 
 

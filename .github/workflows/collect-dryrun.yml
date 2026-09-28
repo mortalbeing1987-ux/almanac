@@ -1,0 +1,26 @@
+name: collect-dryrun
+
+# Step 1 check: run the real fetchers for use cases A and B on GitHub's runners
+# and print per-source status and row counts only. The bundle is written to the
+# runner's scratch disk and discarded -- never uploaded (this repo is public).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Collect A+B (status only, no values logged)
+        env:
+          # Owner-added Actions secrets; only ever placed in requests, never printed.
+          MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
+        run: python -m almanac collect --uses AB --out "$RUNNER_TEMP/out"
