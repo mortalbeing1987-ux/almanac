@@ -2,6 +2,10 @@ name: probe-sources
 
 on:
   workflow_dispatch:
+    inputs:
+      only:
+        description: "comma-separated label prefixes to probe (empty = all)"
+        default: ""
 
 permissions:
   contents: read
@@ -23,4 +27,5 @@ jobs:
           MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
           BEA_API_KEY: ${{ secrets.BEA_API_KEY }}
           CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
+          PROBE_ONLY: ${{ inputs.only }}
         run: python scripts/probe_sources.py
