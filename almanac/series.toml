@@ -197,7 +197,7 @@ key = ["DTWEXBGS", "DTWEXAFEGS", "DTWEXEMEGS"]
 freq = "daily"
 units = "index, Jan 2006 = 100"
 use = "C"
-status = "tbd"  # -> active once DTWEXAFEGS/DTWEXEMEGS probe 200
+status = "active"  # all three probed 200 CSV from runners 2026-09-28
 redistribution = "open"
 
 # ---- D. Event calendar -------------------------------------------------------
