@@ -21,4 +21,5 @@ jobs:
           # header and never prints it. Empty if not set -> MAS is skipped.
           MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
           BEA_API_KEY: ${{ secrets.BEA_API_KEY }}
+          CENSUS_API_KEY: ${{ secrets.CENSUS_API_KEY }}
         run: python scripts/probe_sources.py

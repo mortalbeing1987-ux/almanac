@@ -83,7 +83,7 @@ MARKERS = {
 LISTS = {
 }
 # HTML answers where an API was expected: print the page <title> only.
-TITLES = {"census?1", "census?2", "census?3", "census?4"}
+TITLES = {"census?1", "census?2"}
 
 
 def list_values(body: bytes, field: str, pattern: str) -> str:
