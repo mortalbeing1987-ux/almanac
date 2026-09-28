@@ -67,6 +67,8 @@ MARKERS = {
     "bea?4": "Korea",
     "bea?5": "Error",
     "bea?6": "Error",
+    "bea?7": "Error",
+    "bea?8": "Error",
     "census?1": "5800",
     "census?2": "5800",
 }
@@ -78,8 +80,10 @@ LISTS = {
     "bea?2": ("Key", ""),
     "bea?3": ("Key", "^(Exp|Imp|Bal)(Gds|Serv|GdsServ)$"),
     "bea?4": ("Key", "Korea|Taiwan|Vietnam|Singapore|Switzerland|India|China|Japan|Canada|Mexico|Kingdom|Germany|Euro"),
-    "bea?5": ("TimePeriod", ""),
-    "bea?6": ("TimePeriod", ""),
+    "bea?5": ("AreaOrCountry", "^(SouthKorea|Taiwan|Vietnam|Singapore|Switzerland|India|China|Japan|Canada|Mexico|UnitedKingdom|Germany|EuroArea|AllCountries)$"),
+    "bea?6": ("AreaOrCountry", "^(SouthKorea|Taiwan|Vietnam|Singapore|Switzerland|India|China|Japan|Canada|Mexico|UnitedKingdom|Germany|EuroArea|AllCountries)$"),
+    "bea?7": ("AreaOrCountry", "^(SouthKorea|Taiwan|Vietnam|Singapore|Switzerland|India|China|Japan|Canada|Mexico|UnitedKingdom|Germany|EuroArea|AllCountries)$"),
+    "bea?8": ("AreaOrCountry", "^(SouthKorea|Taiwan|Vietnam|Singapore|Switzerland|India|China|Japan|Canada|Mexico|UnitedKingdom|Germany|EuroArea|AllCountries)$"),
 }
 # HTML answers where an API was expected: print the page <title> only.
 TITLES = {"census?1", "census?2", "census?3", "census?4"}

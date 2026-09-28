@@ -68,8 +68,10 @@ candidates = [
   "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ParameterName=Frequency&ResultFormat=JSON",
   "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ParameterName=Indicator&ResultFormat=JSON",
   "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ParameterName=AreaOrCountry&ResultFormat=JSON",
-  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Indicator=ExpGdsServ&AreaOrCountry=SouthKorea&Frequency=QSA&Year=2025&ResultFormat=JSON",
-  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Indicator=ImpServ&AreaOrCountry=SouthKorea&Frequency=QSA&Year=2025&ResultFormat=JSON",
+  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year=2025&ResultFormat=JSON&AreaOrCountry=AllCountries&Indicator=ExpGds",
+  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year=2025&ResultFormat=JSON&AreaOrCountry=AllCountries&Indicator=ImpGds",
+  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year=2025&ResultFormat=JSON&AreaOrCountry=AllCountries&Indicator=ExpServ",
+  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year=2025&ResultFormat=JSON&AreaOrCountry=AllCountries&Indicator=ImpServ",
 ]
 
 [sources.census]
