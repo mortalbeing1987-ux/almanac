@@ -85,6 +85,12 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     cen = "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO&time="
     out.append(("census:partners", cen + "2026-06"))
     out.append(("census:span", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,ALL_VAL_MO&CTY_CODE=5800&time=from+2000-01"))
+    # quarterly freshness: when did each quarter first appear in the geo workbook?
+    for m, name in ((1, "january"), (2, "february"), (3, "march"), (4, "april"), (5, "may"), (6, "june"), (7, "july")):
+        out.append((f"beahist:{m:02d}", f"https://www.bea.gov/news/2026/us-international-trade-goods-and-services-{name}-2026"))
+    # euro-area composition: EA vs the sum of its members (booleans only)
+    out.append(("census:eacheck", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
+                "&time=from+2022-11&" + "&".join(f"CTY_CODE={c}" for c in EA_CODES)))
     cen2 = ("https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
             "&time=from+2026-04&CTY_CODE=-&CTY_CODE=0025&CTY_CODE=6021")
     out.append(("census:multi", cen2))
@@ -438,6 +444,34 @@ CENSUS_PARTNERS = (r"TOTAL FOR ALL|EUROPEAN UNION|EURO AREA|CANADA|MEXICO|^CHINA
                    r"KOREA|TAIWAN|SWITZERLAND|SINGAPORE|AUSTRALIA|GERMANY|INDIA|VIETNAM")
 
 
+# Census country codes of the euro-area members (names are checked in the reply)
+EA_CODES = ["0025", "4330", "4231", "4870", "4793", "4910", "4470", "4050", "4279", "4280", "4840",
+            "4190", "4759", "4490", "4510", "4239", "4730", "4210", "4710", "4359", "4792", "4700"]
+
+
+def ea_check(body: bytes) -> str:
+    """Per month: does EA equal the sum of today's members, or of the members at
+    the time (Croatia from 2023-01, Bulgaria from 2026-01)? Booleans only."""
+    rows = json.loads(body)
+    head = rows[0]
+    ci, ni, vi, ti = head.index("CTY_CODE"), head.index("CTY_NAME"), head.index("ALL_VAL_MO"), head.index("time")
+    names = sorted({r[ni] for r in rows[1:]})
+    by = {}
+    for r in rows[1:]:
+        by.setdefault(r[ti], {})[r[ci]] = float(r[vi] or 0)
+    out = [f"names {names}"]
+    for t in sorted(by):
+        v = by[t]
+        if "0025" not in v:
+            continue
+        members = {c: x for c, x in v.items() if c != "0025"}
+        today = sum(members.values())
+        at_time = today - (0 if t >= "2023-01" else members.get("4793", 0)) - (0 if t >= "2026-01" else members.get("4870", 0))
+        close = lambda a, b: abs(a - b) <= max(1.0, abs(b) * 1e-6)
+        out.append(f"{t}: EA=sum(today's members) {close(v['0025'], today)}, EA=sum(members at the time) {close(v['0025'], at_time)}")
+    return "; ".join(out)
+
+
 def ita_params(body: bytes, pattern: str) -> str:
     try:
         vals = json.loads(body)["BEAAPI"]["Results"]["ParamValue"]
@@ -609,7 +643,9 @@ def main() -> int:
                                  .replace("cftczip", "cftc").replace("fredcal", "fred"), {})
         if label.startswith(("corra", "sonia")):
             src = {}
-        if label.startswith("census:") and not label.startswith(("census:partners", "census:span", "census:multi")):
+        if label.startswith("census:") and not label.startswith(("census:partners", "census:span", "census:multi", "census:eacheck")):
+            src = {}
+        if label.startswith("beahist"):
             src = {}
         if label.startswith("beameta"):
             src = reg["sources"]["bea"]
@@ -667,6 +703,26 @@ def main() -> int:
             details.append(f"- ITA multi-area call: {ita_rows(body)}")
         if label == "census:partners" and body:
             details.append(f"- census partners: {census_rows(body, CENSUS_PARTNERS)}")
+        if label.startswith("beahist:") and body:
+            m = re.search(rb'href="([^"]*trad\d{4}[^"]*geo-time-series[^"]*\.xlsx)"', body)
+            if not m:
+                details.append(f"- {label}: geo workbook link not found")
+            else:
+                url = m.group(1).decode()
+                url = url if url.startswith("http") else "https://www.bea.gov" + url
+                time.sleep(1)
+                _, wb = probe(url)
+                try:
+                    cells = xlsx_cells(wb, "Table 1")
+                    per = [v for (c, r), v in sorted(cells.items(), key=lambda x: x[0][1]) if c == "A" and re.fullmatch(r"\d{4} [1-4]", v)]
+                    details.append(f"- {label}: {url.rsplit('/', 1)[-1]} latest quarter {per[-1] if per else 'none'}")
+                except Exception as e:
+                    details.append(f"- {label}: {type(e).__name__}")
+        if label == "census:eacheck" and body:
+            try:
+                details.append(f"- census euro-area composition: {ea_check(body)}")
+            except (ValueError, IndexError, KeyError) as e:
+                details.append(f"- census eacheck: {type(e).__name__}")
         if label == "census:multi" and body:
             try:
                 t = json.loads(body)
