@@ -44,6 +44,15 @@ url = "https://www.cftc.gov/dea/newcot/deafut.txt"
 [sources.fed_fomc]
 url = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
 
+[sources.ecb_cal]
+url = "https://www.ecb.europa.eu/press/calendars/mgcgc/html/index.en.html"
+
+[sources.boj_cal]
+url = "https://www.boj.or.jp/en/mopo/mpmsche_minu/index.htm"
+
+[sources.rba_cal]
+url = "https://www.rba.gov.au/schedules-events/board-meeting-schedules.html"
+
 # Step 4 research: official calendar pages, probed for layout before fetchers
 # are written. Candidates are removed once each calendar has a verified url.
 [sources.cal_research]
@@ -266,6 +275,10 @@ status = "active"  # all three probed 200 CSV from runners 2026-09-28
 redistribution = "open"
 
 # ---- D. Event calendar -------------------------------------------------------
+# Calendar entries: one per calendar source. `kind` (cb_decision | release),
+# `country` (ISO-2 or EA) and `name` fill the cal- bundle rows; `time_local` +
+# `tz` are the institution's published standard announcement time (omitted
+# where none is published), converted to UTC per event date.
 [[series]]
 id = "FOMC"
 source = "fed_fomc"
@@ -275,8 +288,54 @@ units = "event"
 use = "D"
 status = "active"
 redistribution = "open"
+kind = "cb_decision"
+country = "US"
+name = "FOMC decision"
+time_local = "14:00"
+tz = "America/New_York"
 
-# SNB/ECB/BoJ/RBA/MAS decisions and US CPI/payrolls/GDP dates: sources found in step 0/4.
+[[series]]
+id = "ECB_DECISION"
+source = "ecb_cal"
+key = "calendar page"
+freq = "event"
+units = "event"
+use = "D"
+status = "active"
+redistribution = "open"
+kind = "cb_decision"
+country = "EA"
+name = "ECB monetary policy decision"
+time_local = "14:15"
+tz = "Europe/Berlin"
+
+[[series]]
+id = "BOJ_DECISION"
+source = "boj_cal"
+key = "calendar page"
+freq = "event"
+units = "event"
+use = "D"
+status = "active"
+redistribution = "open"
+kind = "cb_decision"
+country = "JP"
+name = "BoJ monetary policy decision"  # no fixed announcement time published
+
+[[series]]
+id = "RBA_DECISION"
+source = "rba_cal"
+key = "calendar page"
+freq = "event"
+units = "event"
+use = "D"
+status = "active"
+redistribution = "open"
+kind = "cb_decision"
+country = "AU"
+name = "RBA cash rate decision"
+time_local = "14:30"
+tz = "Australia/Sydney"
 
 # ---- E. Positioning & CB balance sheets --------------------------------------
 [[series]]
