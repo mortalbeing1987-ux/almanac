@@ -1,0 +1,17 @@
+# Never commit data (see CLAUDE.md rule 1)
+data/
+out/
+exports/
+state/
+*.parquet
+*.csv
+*.xls
+*.xlsx
+# local config / secrets
+config.toml
+.env
+# python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/

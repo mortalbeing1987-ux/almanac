@@ -1,0 +1,2 @@
+# runtime deps are added per build step, pinned
+pytest==8.3.3

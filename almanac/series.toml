@@ -1,0 +1,235 @@
+# Almanac series registry -- the single list of what is collected.
+#
+# [sources.<name>]   how to reach a source (url templates use {key})
+# [[series]]         one collected series
+#   id        stable id used in deliveries
+#   source    a [sources] name
+#   key       the source's own identifier for the series
+#   freq      daily | weekly | monthly | event
+#   units     what `value` means
+#   use       use-case tag from docs/ALMANAC_SPEC.md (A-F)
+#   status    active | tbd (source/key not verified yet -- step 0)
+#   redistribution  open | restricted  (restricted = never publish values)
+
+[sources.fred]
+url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={key}"
+note = "keyless; send an honest script User-Agent (a fake browser UA timed out 2026-09-28); API key fallback = secret FRED_API_KEY"
+
+[sources.treasury]
+url = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/{year}/all?type=daily_treasury_yield_curve&field_tdr_date_value={year}&page&_format=csv"
+
+[sources.nyfed]
+url = "https://markets.newyorkfed.org/api/rates/{key}/last/5.json"
+
+[sources.ecb]
+url = "https://data-api.ecb.europa.eu/service/data/{key}?format=csvdata&lastNObservations=5"
+
+[sources.snb]
+url = "https://data.snb.ch/api/cube/{key}/data/csv/en"
+
+[sources.cboe]
+url = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{key}_History.csv"
+
+[sources.cftc]
+url = "https://www.cftc.gov/dea/newcot/deafut.txt"
+
+[sources.fed_fomc]
+url = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+
+[sources.boj]
+url = "TBD"
+[sources.rba]
+url = "TBD"
+[sources.mas]
+url = "TBD"
+[sources.cape]
+url = "TBD"
+
+# ---- A. Curve & credit -------------------------------------------------------
+[[series]]
+id = "UST_PAR_CURVE"
+source = "treasury"
+key = "daily_treasury_yield_curve"
+freq = "daily"
+units = "percent, one value per tenor (series id suffixed _1M.._30Y at delivery)"
+use = "A"
+status = "active"
+redistribution = "open"
+
+[[series]]
+id = "CMT"
+source = "fred"
+key = ["DGS1MO", "DGS3MO", "DGS6MO", "DGS1", "DGS2", "DGS3", "DGS5", "DGS7", "DGS10", "DGS20", "DGS30"]
+freq = "daily"
+units = "percent"
+use = "A"
+status = "tbd"
+redistribution = "open"
+
+[[series]]
+id = "ICE_OAS"
+source = "fred"
+key = ["BAMLC0A0CM", "BAMLC0A1CAAA", "BAMLC0A2CAA", "BAMLC0A3CA", "BAMLC0A4CBBB",
+       "BAMLH0A0HYM2", "BAMLH0A1HYBB", "BAMLH0A2HYB", "BAMLH0A3HYC"]
+freq = "daily"
+units = "percent"
+use = "A"
+status = "tbd"
+redistribution = "restricted"
+
+[[series]]
+id = "REAL_BE"
+source = "fred"
+key = ["DFII5", "DFII10", "T5YIE", "T10YIE"]
+freq = "daily"
+units = "percent"
+use = "A"
+status = "tbd"
+redistribution = "open"
+
+# ---- B. Funding & carry inputs -----------------------------------------------
+[[series]]
+id = "SOFR"
+source = "nyfed"
+key = "secured/sofr"
+freq = "daily"
+units = "percent"
+use = "B"
+status = "active"
+redistribution = "open"
+
+[[series]]
+id = "EFFR"
+source = "nyfed"
+key = "unsecured/effr"
+freq = "daily"
+units = "percent"
+use = "B"
+status = "active"
+redistribution = "open"
+
+[[series]]
+id = "ESTR"
+source = "ecb"
+key = "EST/B.EU000A2X2A25.WT"
+freq = "daily"
+units = "percent"
+use = "B"
+status = "active"
+redistribution = "open"
+
+[[series]]
+id = "SARON"
+source = "snb"
+key = "TBD"
+freq = "daily"
+units = "percent"
+use = "B"
+status = "tbd"
+redistribution = "open"
+
+[[series]]
+id = "TONA"
+source = "boj"
+key = "TBD"
+freq = "daily"
+units = "percent"
+use = "B"
+status = "tbd"
+redistribution = "open"
+
+[[series]]
+id = "RBA_CASH"
+source = "rba"
+key = "TBD"
+freq = "daily"
+units = "percent"
+use = "B"
+status = "tbd"
+redistribution = "open"
+
+[[series]]
+id = "SORA"
+source = "mas"
+key = "TBD"
+freq = "daily"
+units = "percent"
+use = "B"
+status = "tbd"
+redistribution = "open"
+
+# ---- C. Regime ---------------------------------------------------------------
+[[series]]
+id = "VOL_INDEX"
+source = "cboe"
+key = ["VIX", "VIX3M", "VVIX"]
+freq = "daily"
+units = "index points (OHLC; deliver close as value, keep OHLC in a later version if needed)"
+use = "C"
+status = "active"
+redistribution = "restricted"
+
+[[series]]
+id = "REGIME_FRED"
+source = "fred"
+key = ["T10Y3M", "T10Y2Y", "NFCI", "DTWEXBGS", "ICSA"]
+freq = "mixed (daily/weekly per key)"
+units = "per FRED"
+use = "C"
+status = "tbd"
+redistribution = "open"
+
+# ---- D. Event calendar -------------------------------------------------------
+[[series]]
+id = "FOMC"
+source = "fed_fomc"
+key = "calendar page"
+freq = "event"
+units = "event"
+use = "D"
+status = "active"
+redistribution = "open"
+
+# SNB/ECB/BoJ/RBA/MAS decisions and US CPI/payrolls/GDP dates: sources found in step 0/4.
+
+# ---- E. Positioning & CB balance sheets --------------------------------------
+[[series]]
+id = "COT_FX"
+source = "cftc"
+key = ["SWISS FRANC", "JAPANESE YEN", "EURO FX", "AUSTRALIAN DOLLAR", "BRITISH POUND", "CANADIAN DOLLAR"]
+freq = "weekly"
+units = "contracts (non-commercial long/short, open interest)"
+use = "E"
+status = "active"
+redistribution = "open"
+
+[[series]]
+id = "SNB_SIGHT"
+source = "snb"
+key = "snbgwdchfsgw"
+freq = "weekly"
+units = "CHF millions"
+use = "E"
+status = "active"
+redistribution = "open"
+
+# ---- F. Long-run backdrop ----------------------------------------------------
+[[series]]
+id = "CPI"
+source = "fred"
+key = ["CPIAUCSL", "CPILFESL", "UNRATE", "PAYEMS"]
+freq = "monthly"
+units = "per FRED"
+use = "F"
+status = "tbd"
+redistribution = "open"
+
+[[series]]
+id = "CAPE"
+source = "cape"
+key = "TBD"
+freq = "monthly"
+units = "ratio"
+use = "F"
+status = "tbd"
+redistribution = "open"
