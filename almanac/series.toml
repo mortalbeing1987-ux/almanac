@@ -7,7 +7,7 @@
 #   key       the source's own identifier for the series
 #   freq      daily | weekly | monthly | event
 #   units     what `value` means
-#   use       use-case tag from docs/ALMANAC_SPEC.md (A-F)
+#   use       use-case tag from docs/ALMANAC_SPEC.md (A-G)
 #   status    active | tbd (source/key not verified yet -- step 0)
 #   redistribution  open | restricted  (restricted = never publish values)
 
@@ -247,3 +247,39 @@ redistribution = "open"
 
 # CAPE dropped in step 0 (owner decision 2026-09-28): declining usefulness, and
 # no stable machine-readable official source (shillerdata.com xls link moves).
+
+# ---- G. Trade ----------------------------------------------------------------
+[[series]]
+id = "TRADE_TOTAL"
+source = "fred"
+# BoP basis, SA: exports G&S, imports G&S, balance G&S, balance goods
+key = ["BOPTEXP", "BOPTIMP", "BOPGSTB", "BOPGTB"]
+candidates = ["BOPTEXP", "BOPTIMP", "BOPGSTB", "BOPGTB"]
+freq = "monthly"
+units = "USD millions, seasonally adjusted"
+use = "G"
+status = "tbd"
+redistribution = "open"
+
+[[series]]
+id = "TRADE_BILATERAL"
+source = "fred"
+# Census goods trade by partner (exports FAS / imports customs basis), NSA.
+# FRED codes mix letter (EXPCH) and Census-number (IMP0004) forms: step 0
+# probes both and keeps the form that answers.
+# Partners: World, Canada, Mexico, China, Japan, Germany, United Kingdom, South Korea, Taiwan, Vietnam, India, Switzerland, Singapore, European Union
+key = "TBD"
+candidates = [
+  "EXP0004", "IMP0004", "EXPCA", "EXP1220", "IMPCA", "IMP1220", "EXPMX", "EXP2010",
+  "IMPMX", "IMP2010", "EXPCH", "EXP5700", "IMPCH", "IMP5700", "EXPJP", "EXP5880",
+  "IMPJP", "IMP5880", "EXPGE", "EXP4280", "IMPGE", "IMP4280", "EXPUK", "EXP4120",
+  "IMPUK", "IMP4120", "EXPKS", "EXP5800", "IMPKS", "IMP5800", "EXPTW", "EXP5830",
+  "IMPTW", "IMP5830", "EXPVM", "EXP5520", "IMPVM", "IMP5520", "EXPIN", "EXP5330",
+  "IMPIN", "IMP5330", "EXPSZ", "EXP4419", "IMPSZ", "IMP4419", "EXPSN", "EXP5590",
+  "IMPSN", "IMP5590", "EXP0003", "IMP0003",
+]
+freq = "monthly"
+units = "USD millions, not seasonally adjusted"
+use = "G"
+status = "tbd"
+redistribution = "open"

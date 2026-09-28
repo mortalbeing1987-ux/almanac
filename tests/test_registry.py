@@ -18,7 +18,7 @@ def test_required_fields_and_values():
     for s in REG["series"]:
         for field in ("id", "source", "key", "freq", "units", "use", "status", "redistribution"):
             assert field in s, (s.get("id"), field)
-        assert s["use"] in "ABCDEF"
+        assert s["use"] in "ABCDEFG"
         assert s["status"] in ("active", "tbd")
         assert s["redistribution"] in ("open", "restricted")
 
