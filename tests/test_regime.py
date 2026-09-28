@@ -89,7 +89,7 @@ def test_freshness_uses_each_keys_own_limit():
 
 def test_weekly_key_looks_back_90_days_inside_a_daily_series():
     reg = series("REGIME_FRED")
-    st = state_mod.State(series={f"REGIME_FRED_{k}": {"last_obs": "2026-09-25"} for k in keys(reg)})
+    st = state_mod.State(series={f"REGIME_FRED_{k}": {"last_obs": "2026-09-25", "backfilled_from": "full"} for k in keys(reg)})
     assert deliver.since_by_series([reg], st, TODAY)["REGIME_FRED"] == date(2026, 6, 27)  # NFCI/ICSA: -90d
 
 

@@ -1,5 +1,5 @@
 """python -m almanac collect --uses AB --since 2026-09-01 --out out/
-python -m almanac deliver --data-dir <checked-out private data repo> --uses ABCD
+python -m almanac deliver --data-dir <checked-out private data repo> --uses ABCDE
 
 `collect` fetches and writes one bundle to --out; `deliver` runs a scheduled
 pass with delivery state (see deliver.py). Both print per-source status and
@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--out", type=Path, default=Path("out"))
     d = sub.add_parser("deliver", help="scheduled pass into a checked-out private data repo")
     d.add_argument("--data-dir", type=Path, required=True)
-    d.add_argument("--uses", default="ABCD", help="use-case tags, e.g. ABCD (D = event calendar)")
+    d.add_argument("--uses", default="ABCDE", help="use-case tags, e.g. ABCDE (D = event calendar)")
     args = ap.parse_args(argv)
 
     if args.cmd == "deliver":
@@ -43,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
             size = f"  ({parquet.stat().st_size / 1e6:.2f} MB)"
         print(f"rows delivered: {status['rows_delivered']} (revisions: {status['revisions_delivered']})"
               f"  bundle: {status['bundle']}{size}")
+        if status["bundle"]:
+            print("rows by series: " + ", ".join(f"{k} {n}" for k, n in sorted(_rows_by_series(parquet).items())))
         stale = status["freshness"]["stale"]
         print(f"stale series: {len(stale)}{'  ' + ', '.join(stale) if stale else ''}")
         for src, s in sorted(status["calendar_sources"].items()):
@@ -60,6 +62,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{r.source:10s} {r.status:7s} {len(r.observations):6d} obs  {r.reason}")
     print(f"bundle: {path}")
     return 0
+
+
+def _rows_by_series(parquet: Path) -> dict[str, int]:
+    """Row counts per registry series id (counts only, never values)."""
+    import pyarrow.parquet as pq
+    ids = sorted((s["id"] for s in load().series), key=len, reverse=True)
+    out: dict[str, int] = {}
+    for sid in pq.read_table(parquet, columns=["series_id"]).column("series_id").to_pylist():
+        reg_id = next((i for i in ids if sid == i or sid.startswith(i + "_")), sid)
+        out[reg_id] = out.get(reg_id, 0) + 1
+    return out
 
 
 if __name__ == "__main__":

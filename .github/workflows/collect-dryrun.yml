@@ -3,6 +3,8 @@ name: collect-dryrun
 # Step 1 check: run the real fetchers for use cases A and B on GitHub's runners
 # and print per-source status and row counts only. The bundle is written to the
 # runner's scratch disk and discarded -- never uploaded (this repo is public).
+# The delivery passes start from a read-only copy of the private data repo's
+# state and are never pushed.
 on:
   workflow_dispatch:
   push:
@@ -28,9 +30,31 @@ jobs:
           # Owner-added Actions secrets; only ever placed in requests, never printed.
           MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
         run: python -m almanac collect --uses AB --out "$RUNNER_TEMP/out"
-      - name: Two delivery passes into a scratch folder (status only)
+      - name: Check out the private data repo, read-only
+        # The state to start from: a copy of the real one, so series that were
+        # delivered before (e.g. a raised `backfill`) behave as in production.
+        # Credentials are not kept (persist-credentials: false) and this job has
+        # no push step: nothing is ever written back to the data repo.
+        if: vars.DATA_REPO != ''
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ vars.DATA_REPO }}
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: data-repo-readonly
+          persist-credentials: false
+      - name: Copy it to a scratch folder
+        run: |
+          mkdir -p "$RUNNER_TEMP/data"
+          if [ -d data-repo-readonly ]; then
+            cp -a data-repo-readonly/. "$RUNNER_TEMP/data/"
+            rm -rf "$RUNNER_TEMP/data/.git" data-repo-readonly
+            echo "starting from a copy of the data repo's state"
+          else
+            echo "::notice::DATA_REPO not set: starting from an empty folder"
+          fi
+      - name: Two delivery passes into the scratch copy (status only)
         env:
           MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
         run: |
-          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses ABCD
-          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses ABCD
+          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses ABCDE
+          python -m almanac deliver --data-dir "$RUNNER_TEMP/data" --uses ABCDE

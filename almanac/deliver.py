@@ -17,7 +17,7 @@ from pathlib import Path
 from . import calendar, freshness, state as state_mod
 from .bundle import assign_revisions, run_id_for, write_macro_bundle
 from .http import Http
-from .registry import Registry, delivered_id, key_settings, keys
+from .registry import Registry, delivered_ids, key_settings, keys
 from .run import collect
 
 # Re-fetch window, by frequency, so revisions to already-delivered values are
@@ -41,24 +41,68 @@ def backfill_start(series: dict, today: date, default: int = BACKFILL_DAYS) -> d
     return FULL_HISTORY if b == "full" else today - timedelta(days=int(b))
 
 
+def backfill_record(series: dict, today: date, default: int = BACKFILL_DAYS) -> str:
+    """What state/series.json records as `backfilled_from` once a fetch from the
+    registry's horizon succeeded: "full", or the date the fetch started from."""
+    return "full" if series.get("backfill", default) == "full" \
+        else backfill_start(series, today, default).isoformat()
+
+
+def recorded_horizon(meta: dict, today: date, default: int = BACKFILL_DAYS) -> date:
+    """How deep an id has been fetched: its `backfilled_from` record; an id
+    delivered before the record existed counts as the old default (365 days)."""
+    rec = meta.get("backfilled_from")
+    if rec is None:
+        return today - timedelta(days=default)
+    return FULL_HISTORY if rec == "full" else date.fromisoformat(rec)
+
+
+def _ids(s: dict, st: state_mod.State) -> list[tuple[str | None, str]]:
+    """(key, delivered id) pairs of a series; treasury tenor ids come from state."""
+    if s["source"] == "treasury":
+        return [(None, sid) for sid in sorted(st.series) if sid.startswith(s["id"] + "_")]
+    return [(k if isinstance(s["key"], list) else None, i) for k in keys(s) for i in delivered_ids(s, k)]
+
+
 def since_by_series(selected: list[dict], st: state_mod.State, today: date,
                     backfill: int = BACKFILL_DAYS) -> dict[str, date]:
-    """Earliest date to fetch, per registry series: for each key, its last
-    delivered date minus that key's own look-back (weekly codes look back
-    further than daily ones); a key never delivered pulls the series back to
-    its backfill horizon. The series takes the earliest of its keys. Being per
-    series, one series' full backfill never re-pulls another series' history."""
+    """Earliest date to fetch, per registry series: for each delivered id, its
+    last delivered date minus that key's own look-back (weekly codes look back
+    further than daily ones). An id never delivered pulls the series back to its
+    backfill horizon; so does an id whose recorded horizon (`backfilled_from`)
+    is shallower than the registry's `backfill` now asks for -- deepening, once:
+    the record is updated after a successful fetch (see record_backfill). The
+    record, not first_obs, is compared, so a source whose history starts later
+    than asked (DFII10: 2003) is not re-fetched every run. The series takes the
+    earliest of its ids. Being per series, one series' backfill never re-pulls
+    another series' history."""
     out: dict[str, date] = {}
     for s in selected:
-        pairs = [(k, st.last_obs(delivered_id(s, k))) for k in keys(s)]
-        if s["source"] == "treasury":  # tenor ids aren't known up front
-            pairs = [(None, m.get("last_obs")) for sid, m in st.series.items()
-                     if sid.startswith(s["id"] + "_")] or [(None, None)]
-        starts = [backfill_start(s, today, backfill) if last is None
-                  else date.fromisoformat(last) - timedelta(days=lookback_days(s, k if isinstance(s["key"], list) else None))
-                  for k, last in pairs]
+        horizon = backfill_start(s, today, backfill)
+        starts = []
+        for k, sid in _ids(s, st) or [(None, None)]:
+            meta = st.series.get(sid, {}) if sid else {}
+            last = meta.get("last_obs")
+            if last is None or horizon < recorded_horizon(meta, today, backfill):
+                starts.append(horizon)
+            else:
+                starts.append(date.fromisoformat(last) - timedelta(days=lookback_days(s, k)))
         out[s["id"]] = min(starts)
     return out
+
+
+def record_backfill(selected: list[dict], st: state_mod.State, since: dict[str, date],
+                    results: list, today: date, backfill: int = BACKFILL_DAYS) -> None:
+    """After a run: every id of a series fetched from its registry horizon, by a
+    source whose status is `ok`, records that horizon. An outage, error or empty
+    result records nothing, so a deepening run is retried next time."""
+    ok = {r.source for r in results if r.status == "ok"}
+    for s in selected:
+        if s["source"] in ok and since[s["id"]] <= backfill_start(s, today, backfill):
+            rec = backfill_record(s, today, backfill)
+            for _, sid in _ids(s, st):
+                if sid in st.series:
+                    st.series[sid]["backfilled_from"] = rec
 
 
 def run(reg: Registry, data_dir: Path, uses: str, http: Http | None = None,
@@ -79,6 +123,7 @@ def run(reg: Registry, data_dir: Path, uses: str, http: Http | None = None,
     for s in selected:
         ids_by_source.setdefault(s["source"], set()).update(freshness.expected_ids(s))
     st.apply(rows, results, ids_by_source, now.isoformat(timespec="seconds"))
+    record_backfill(selected, st, since, results, today)
     fresh = freshness.summary(selected, st, today)
 
     cal_results, cal_rows, cal_bundle = [], [], None

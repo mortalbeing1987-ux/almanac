@@ -75,6 +75,13 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     # full-history FRED files for the weekly / lagged series (cosd from 1900)
     for k in ("NFCI", "ICSA", "DTWEXBGS", "T10Y3M"):
         out.append((f"fredfull:{k}", reg["sources"]["fred"]["url"].format(key=k, **dict(fmt, since="1900-01-01"))))
+    # use case E: CFTC legacy futures-only history (page + yearly zips), SNB
+    # sight-deposit cube dimensions
+    out.append(("cftc:history", "https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalCompressed/index.htm"))
+    for y in (f"{year}", "2015", "2014", "2000", "1990"):
+        out.append((f"cftczip:{y}", f"https://www.cftc.gov/files/dea/history/deacot{y}.zip"))
+    out.append(("snb:dims", "https://data.snb.ch/api/cube/snbgwdchfsgw/dimensions/en"))
+    out.append(("snb:snbgwdchfsgw", reg["sources"]["snb"]["url"].format(key="snbgwdchfsgw", **fmt)))
     return out
 
 
@@ -172,11 +179,98 @@ def list_values(body: bytes, field: str, pattern: str) -> str:
 # Layout ("shape") of a response, for writing parsers and fixtures: every
 # digit is replaced by 9, so no value can be read back. Labels, codes and
 # header names stay visible. Enabled for the step-1 sources.
-SHAPE = {"cboe", "cboe:VIX3M", "cboe:VVIX", "fred:NFCI", "fred:ICSA"}
+SHAPE = {"cftc", "snb:snbgwdchfsgw"}
 # Latest and earliest observation DATES only (first CSV column), to measure
 # publication lag and history depth. Dates are not values.
-DATE_SPAN = {"cboe", "cboe:VIX3M", "cboe:VVIX", "fredfull:NFCI", "fredfull:ICSA",
-             "fredfull:DTWEXBGS", "fredfull:T10Y3M"}
+DATE_SPAN: set[str] = set()
+
+
+# CFTC legacy COT rows are "name",YYMMDD,YYYY-MM-DD,code,... (deafut.txt has
+# no header; the yearly zips' annual.txt has one). Only names, codes, the
+# column count and DATES are reported -- positions are never read.
+COT_NAMES = r"SWISS FRANC|JAPANESE YEN|EURO FX|AUSTRALIAN DOLLAR|BRITISH POUND|CANADIAN DOLLAR|POUND STERLING"
+
+
+def cot_rows(text: str) -> str:
+    import csv
+    import io
+    rows = list(csv.reader(io.StringIO(text)))
+    out: list[str] = []
+    header = rows[0] if rows and not rows[0][1].strip().isdigit() else None
+    if header:
+        out.append(f"header ({len(header)} cols): " + " | ".join(h.strip() for h in header[:12]) + " | ...")
+        out.append("  cols 13-20: " + " | ".join(h.strip() for h in header[12:20]))
+        rows = rows[1:]
+    spans: dict[tuple[str, str], list[str]] = {}
+    for r in rows:
+        if len(r) > 3 and re.search(COT_NAMES, r[0].upper()):
+            spans.setdefault((r[0].strip(), r[3].strip()), []).append(r[2].strip())
+    out.append(f"{len(rows)} rows, {len(rows[0]) if rows else 0} cols")
+    for (name, code), ds in sorted(spans.items(), key=lambda x: x[0][1]):
+        out.append(f"  {code} {name}: {len(ds)} rows, {min(ds)}..{max(ds)}")
+    return "\n    ".join(out)
+
+
+def cot_zip(body: bytes) -> str:
+    import io
+    import zipfile
+    try:
+        z = zipfile.ZipFile(io.BytesIO(body))
+    except zipfile.BadZipFile:
+        return "not a zip"
+    names = [f"{i.filename} ({i.file_size:,} B)" for i in z.infolist()]
+    first = z.infolist()[0]
+    text = z.read(first).decode("latin-1")
+    sample = [mask(l)[:160] for l in text.splitlines() if "092741" in l][:1]
+    return ("members: " + ", ".join(names) + "\n    first line: " + mask(text.splitlines()[0])[:300]
+            + "\n    CHF line: " + (sample[0] if sample else "none") + "\n    " + cot_rows(text))
+
+
+def snb_dims(body: bytes) -> str:
+    """Every id/name pair in the cube's dimension tree (metadata, no values)."""
+    try:
+        doc = json.loads(body)
+    except ValueError:
+        return "not json"
+    out: list[str] = []
+
+    def walk(o: object, depth: int) -> None:
+        if isinstance(o, dict):
+            label = " ".join(str(o[k]) for k in ("id", "name") if k in o and isinstance(o[k], str))
+            if label:
+                out.append("  " * depth + mask(label))
+            for v in o.values():
+                walk(v, depth + 1)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v, depth)
+
+    walk(doc, 0)
+    return "\n    ".join(out[:200])
+
+
+def snb_codes(body: bytes) -> str:
+    """Distinct dimension-code combinations with row counts and date spans."""
+    lines = body.decode("utf-8-sig", "replace").splitlines()
+    head = next((i for i, l in enumerate(lines) if l.startswith('"Date"')), None)
+    if head is None:
+        return "no Date header"
+    cols = [c.strip('"') for c in lines[head].split(";")]
+    combos: dict[str, list[str]] = {}
+    for l in lines[head + 1:]:
+        f = [c.strip('"') for c in l.split(";")]
+        if len(f) == len(cols):
+            combos.setdefault("/".join(f[1:-1]), []).append(f[0])
+    import datetime as dt
+    days: dict[str, dict[str, int]] = {}
+    for l in lines[head + 1:]:
+        f = [c.strip('"') for c in l.split(";")]
+        if len(f) == len(cols) and f[-1]:
+            wd = dt.date.fromisoformat(f[0]).strftime("%a")
+            days.setdefault(f[1], {}).setdefault(wd, 0)
+            days[f[1]][wd] += 1
+    return (f"header {cols}\n    non-empty by weekday: {days}\n    " + "\n    ".join(
+        f"{k}: {len(v)} rows, {min(v)}..{max(v)}" for k, v in sorted(combos.items())))
 
 
 def date_span(body: bytes) -> str:
@@ -289,11 +383,15 @@ def main() -> int:
     lines = ["| source | status | bytes | type | body | marker | time |",
              "|---|---|---|---|---|---|---|"]
     details: list[str] = []
+    only = [p for p in os.environ.get("PROBE_ONLY", "").split(",") if p]
     for label, url in probe_urls(reg):
+        if only and not any(label.startswith(p) for p in only):
+            continue
         if not url:
             lines.append(f"| {label} | TBD (no url yet) | | | | | |")
             continue
-        src = reg["sources"].get(label.split("?")[0].split(":")[0].replace("fredfull", "fred"), {})
+        src = reg["sources"].get(label.split("?")[0].split(":")[0].replace("fredfull", "fred")
+                                 .replace("cftczip", "cftc"), {})
         creds = auth(src)
         if creds is None:
             lines.append(f"| {label} | needs secret {src['secret']} (not set; not requested) | | | | | |")
@@ -328,6 +426,18 @@ def main() -> int:
                                + (f", MISSING: {missing}" if missing else ""))
         if label in CENSUS_ROWS and cells[3] == "json":
             details.append(f"- {label}: {census_rows(body, CENSUS_ROWS[label])}")
+        if label == "cftc" and body:
+            details.append(f"- cftc (deafut.txt) currency rows: {cot_rows(body.decode('latin-1'))}")
+        if label.startswith("cftczip:") and body:
+            details.append(f"- {label}: {cot_zip(body)}")
+        if label == "cftc:history" and body:
+            links = sorted(set(re.findall(rb'href="([^"]*deacot[^"]*)"', body)))
+            details.append(f"- cftc:history legacy futures-only links: {len(links)}: "
+                           + ", ".join(l.decode()[-40:] for l in links))
+        if label == "snb:dims" and body:
+            details.append(f"- snb:dims:\n    {snb_dims(body)}")
+        if label == "snb:snbgwdchfsgw" and body:
+            details.append(f"- snb:snbgwdchfsgw codes: {snb_codes(body)}")
         if label in LISTS:
             details.append(f"- {label}: {list_values(body, *LISTS[label])}")
         time.sleep(1)  # one request at a time, politely
