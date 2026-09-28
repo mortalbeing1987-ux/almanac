@@ -43,6 +43,10 @@ jobs:
           repository: ${{ vars.DATA_REPO }}
           token: ${{ secrets.DATA_REPO_TOKEN }}
           path: data-repo
+          # The write token is used for this clone only and NOT left in
+          # data-repo/.git/config while dependencies install and the collector
+          # runs; the push step below supplies it again, in memory only.
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -56,6 +60,13 @@ jobs:
           python -m almanac deliver --data-dir data-repo --uses "$USES"
       - name: Commit and push to the data repo
         working-directory: data-repo
+        env:
+          # Only this step sees the token. It goes into the remote URL given on
+          # the git command line (never written to .git/config, never echoed;
+          # GitHub masks the secret if git ever repeats the URL in an error).
+          DATA_REPO: ${{ vars.DATA_REPO }}
+          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+          GIT_TERMINAL_PROMPT: "0"
         run: |
           git config user.name "almanac-bot"
           git config user.email "almanac-bot@users.noreply.github.com"
@@ -63,8 +74,10 @@ jobs:
           if git diff --cached --quiet; then echo "nothing to commit"; exit 0; fi
           run_id=$(python -c "import json;print(json.load(open('status.json'))['run_id'])")
           git commit -q -m "almanac run $run_id"
+          branch=$(git rev-parse --abbrev-ref HEAD)
+          remote="https://x-access-token:${DATA_REPO_TOKEN}@github.com/${DATA_REPO}.git"
           for i in 1 2 3; do
-            git push -q && exit 0
-            git pull -q --rebase && continue
+            git push -q "$remote" "HEAD:$branch" && exit 0
+            git pull -q --rebase "$remote" "$branch" || true
           done
           echo "::error::push to data repo failed"; exit 1

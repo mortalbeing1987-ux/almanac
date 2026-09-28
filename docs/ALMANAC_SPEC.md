@@ -78,6 +78,10 @@ Manifest: `contract_version`, `kind`, `run_id`, `started_at`, `finished_at`,
 `error` + reason), and the freshness summary. Revisions are delivered as new
 rows with `revision` > 0 — never by rewriting old bundles.
 
+The contract is the bundles plus the root `status.json`. `state/` in the data
+repo is Almanac's private bookkeeping; its layout may change without a
+contract bump, and consumers must not read it.
+
 ## Sources (verify in step 0 — URLs drift)
 
 Keyless and reachable as of 2026-09-28 from a residential connection:

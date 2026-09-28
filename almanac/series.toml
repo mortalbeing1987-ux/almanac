@@ -5,11 +5,15 @@
 #   id        stable id used in deliveries
 #   source    a [sources] name
 #   key       the source's own identifier for the series
-#   freq      daily | weekly | monthly | event
+#   freq      daily | weekly | monthly | quarterly | event
 #   units     what `value` means
 #   use       use-case tag from docs/ALMANAC_SPEC.md (A-G)
 #   status    active | tbd (source/key not verified yet -- step 0)
 #   redistribution  open | restricted  (restricted = never publish values)
+# optional per series:
+#   max_age_days   freshness limit (default by freq: daily 4, weekly 10, monthly 45, quarterly 120)
+#   lookback_days  revision re-fetch window (default by freq: daily 30, weekly 90,
+#                  monthly 400, quarterly 800)
 #
 # url templates: {key} registry key, {since} earliest date wanted (YYYY-MM-DD),
 # {n} number of days wanted, {year}/{prev_year} calendar years.
