@@ -58,15 +58,11 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
 # Marker strings a candidate's body must contain for the right series to be
 # there. Only "yes"/"no" is reported, never the surrounding values.
 MARKERS = {
-    "boj?1": "STRDCLUCON",
-    "rba?1": "FIRMMCRTD",
-    "rba?2": "FIRMMCRTD",
+    "boj": "STRDCLUCON",
+    "rba": "FIRMMCRTD",
     "mas?1": "sora",
     "mas?2": "sora",
     "cape?1": "ie_data",
-    "SARON?zirepo": "SARON",
-    "SARON?snbgwdzid": "SARON",
-    "SARON?zimoma": "SARON",
 }
 
 
