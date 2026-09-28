@@ -168,37 +168,6 @@ def list_values(body: bytes, field: str, pattern: str) -> str:
 # header names stay visible. Enabled for the step-1 sources.
 SHAPE = {"fred", "treasury", "nyfed", "ecb", "snb", "boj", "rba", "mas"}
 
-# Calendar pages (step 4 research): raw excerpts around a keyword, to see the
-# markup a parser needs. Event dates are public schedule facts, not data
-# values, so they are shown unmasked. (label -> keyword regex)
-SNIPPETS = {
-    "cal_research?1": r"FOMC Meetings</|fomc-meeting__month[^>]*><strong>[A-Z][a-z]+/",
-    "cal_research?2": r"(?i)monetary policy assessment|\.ics|ical|api/",
-    "cal_research?3": r"(?i)monetary policy assessment|\.ics|ical",
-    "cal_research?4": r"<tbody>|<tr> <td>|<tr>\s*<td>",
-    "cal_research?5": r"<caption|Monetary Policy Board</th>|<th scope=\"row\">",
-    "cal_research?6": r"(?i)next monetary policy|scheduled|2027|/api/|\.json",
-    "cal_research?7": r"Consumer Price Index|Employment Situation",
-    "cal_research?8": r"(?i)release date|2026",
-    "cal_research?9": r"(?i)<form|<select|<input|name=\"[a-z_]+\"|download",
-    "cal_research?10": r"(?i)release-calendar|calendar-date|<td|2026-1",
-    "cal_research?11": r"(?i)<caption|<h2|scheduled-date|release-date|Year",
-    "cal_research?12": r"(?i)monetary policy statement|/api/",
-}
-
-
-def snippets(body: bytes, pattern: str, n: int = 8, width: int = 420) -> str:
-    text = body.decode("utf-8", "replace")
-    out = []
-    for m in re.finditer(pattern, text):
-        if len(out) >= n:
-            break
-        chunk = re.sub(r"\s+", " ", text[max(0, m.start() - 80): m.start() + width])
-        if not any(chunk[:60] in o for o in out):
-            out.append(chunk)
-    return f"{len(text):,} chars; " + ("\n    " + "\n    ".join(out) if out else "no match")
-
-
 def mask(s: str) -> str:
     """Numbers and dates -> 9s; digits inside codes (DGS10, 1TGT) are kept."""
     return re.sub(r"(?<![A-Za-z_\d])[-+]?\d[\d.,:/-]*(?![A-Za-z_\d])",
@@ -317,8 +286,6 @@ def main() -> int:
         lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
         if label in SHAPE and body:
             details.append(f"- {label} shape: {shape(body)}")
-        if label in SNIPPETS and body:
-            details.append(f"- {label} excerpts: {snippets(body, SNIPPETS[label])}")
         if label in TITLES and cells[3] == "html":
             m = re.search(rb"<title[^>]*>(.*?)</title>", body, re.I | re.S)
             details.append(f"- {label} page title: {m.group(1).decode('utf-8', 'replace').strip()[:120] if m else 'none'}")

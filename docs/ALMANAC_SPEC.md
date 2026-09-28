@@ -73,6 +73,25 @@ A bundle is a folder `<kind>-<run_id>/` (`run_id` = UTC start,
 | `source` | string | |
 | `fetched_at` | string | |
 
+Calendar events cover the past 30 days to 60 days ahead and are insert-only by
+`event_id`: an id is delivered once. If an institution moves an event, the new
+date has a new id and arrives as a new row in a later `cal-` bundle; earlier
+bundles are never rewritten (the old row stays, as it was known at the time).
+`event_time_utc` is the institution's published standard announcement time,
+converted to UTC for that date (null where none is published, e.g. BoJ).
+Sources: FOMC (federalreserve.gov), SNB (snb.ch event schedule), ECB
+(ecb.europa.eu Governing Council calendar), BoJ (boj.or.jp MPM schedule), RBA
+(rba.gov.au board meeting schedule), GDP (BEA release schedule); CPI and the
+Employment Situation from the St. Louis Fed's FRED release calendar, which
+republishes the BLS schedule (bls.gov refuses scripted clients). MAS publishes
+Monetary Policy Statement dates only about a week ahead, so it is not yet
+covered.
+
+`status.json` also carries `cal_bundle`, `events_delivered`,
+`calendar_sources` (per source: status, events in horizon, furthest event) and
+`freshness.calendar_ahead`: per calendar source, the furthest event found and
+`ok = false` when it is less than 60 days out (listed under `short`).
+
 Manifest: `contract_version`, `kind`, `run_id`, `started_at`, `finished_at`,
 `files` (name, sha256, rows), per-source status (`ok` / `empty` / `outage` /
 `error` + reason), and the freshness summary. Revisions are delivered as new

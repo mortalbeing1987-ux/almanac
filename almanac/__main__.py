@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--out", type=Path, default=Path("out"))
     d = sub.add_parser("deliver", help="scheduled pass into a checked-out private data repo")
     d.add_argument("--data-dir", type=Path, required=True)
-    d.add_argument("--uses", default="AB", help="use-case tags, e.g. AB")
+    d.add_argument("--uses", default="ABD", help="use-case tags, e.g. ABD (D = event calendar)")
     args = ap.parse_args(argv)
 
     if args.cmd == "deliver":
@@ -39,6 +39,12 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{src:10s} {s['status']:7s} {s['observations']:6d} obs  since {s['since']}  {s['reason']}")
         print(f"rows delivered: {status['rows_delivered']}  bundle: {status['bundle']}")
         print(f"stale series: {len(status['freshness']['stale'])}")
+        for src, s in sorted(status["calendar_sources"].items()):
+            print(f"{src:16s} {s['status']:7s} {s['events']:3d} events  furthest {s['furthest_event']}  {s['reason']}")
+        if status["calendar_sources"]:
+            ahead = status["freshness"]["calendar_ahead"]
+            print(f"events delivered: {status['events_delivered']}  bundle: {status['cal_bundle']}")
+            print(f"calendars short of {ahead['horizon_days']} days: {', '.join(ahead['short']) or 'none'}")
         return 0
 
     started = datetime.now(timezone.utc)

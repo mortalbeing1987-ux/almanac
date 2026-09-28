@@ -53,24 +53,27 @@ url = "https://www.boj.or.jp/en/mopo/mpmsche_minu/index.htm"
 [sources.rba_cal]
 url = "https://www.rba.gov.au/schedules-events/board-meeting-schedules.html"
 
-# Step 4 research: official calendar pages, probed for layout before fetchers
-# are written. Candidates are removed once each calendar has a verified url.
-[sources.cal_research]
+[sources.snb_cal]
+url = "https://www.snb.ch/en/services-events/digital-services/event-schedule"
+
+# US release dates. bls.gov refuses scripted clients (403), so CPI and the
+# Employment Situation come from the St. Louis Fed's FRED release calendar,
+# which republishes the BLS schedule ({key} = FRED release id). GDP comes from
+# BEA's own release schedule.
+[sources.us_cpi_cal]
+url = "https://fred.stlouisfed.org/releases/calendar?rid={key}&y={year}"
+
+[sources.us_payrolls_cal]
+url = "https://fred.stlouisfed.org/releases/calendar?rid={key}&y={year}"
+
+[sources.bea_gdp_cal]
+url = "https://www.bea.gov/news/schedule/full"
+
+[sources.mas_cal]
 url = "TBD"
-candidates = [
-  "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
-  "https://www.snb.ch/en/services-events/events",
-  "https://www.snb.ch/en/services-events/digital-services/event-schedule",
-  "https://www.boj.or.jp/en/mopo/mpmsche_minu/index.htm",
-  "https://www.rba.gov.au/schedules-events/board-meeting-schedules.html",
-  "https://www.mas.gov.sg/monetary-policy/mas-monetary-policy-statements",
-  "https://www.bls.gov/schedule/news_release/bls.ics",
-  "https://www.bls.gov/schedule/news_release/cpi.htm",
-  "https://alfred.stlouisfed.org/release/downloaddates?rid=10",
-  "https://fred.stlouisfed.org/releases/calendar?rid=10&y=2026",
-  "https://www.bea.gov/news/schedule",
-  "https://www.mas.gov.sg/monetary-policy",
-]
+note = """probe 2026-09-28: MAS publishes each Monetary Policy Statement date only about a week
+ahead, and its advance release calendar is filled in by JavaScript (no dates in the HTML).
+No official source gives MAS decision dates 60 days out; left tbd."""
 
 [sources.boj]
 url = "https://www.stat-search.boj.or.jp/api/v1/getDataCode?format=csv&lang=en&db=FM01&code={key}"
@@ -336,6 +339,79 @@ country = "AU"
 name = "RBA cash rate decision"
 time_local = "14:30"
 tz = "Australia/Sydney"
+
+[[series]]
+id = "SNB_DECISION"
+source = "snb_cal"
+key = "event schedule"
+freq = "event"
+units = "event"
+use = "D"
+status = "active"
+redistribution = "open"
+kind = "cb_decision"
+country = "CH"
+name = "SNB monetary policy assessment"
+time_local = "09:30"
+tz = "Europe/Zurich"
+
+[[series]]
+id = "MAS_DECISION"
+source = "mas_cal"
+key = "TBD"
+freq = "event"
+units = "event"
+use = "D"
+status = "tbd"  # see [sources.mas_cal] note
+redistribution = "open"
+kind = "cb_decision"
+country = "SG"
+name = "MAS Monetary Policy Statement"
+
+[[series]]
+id = "US_CPI_RELEASE"
+source = "us_cpi_cal"
+key = "10"  # FRED release id: Consumer Price Index
+freq = "event"
+units = "event"
+use = "D"
+status = "active"
+redistribution = "open"
+kind = "release"
+country = "US"
+name = "CPI"
+time_local = "08:30"
+tz = "America/New_York"
+
+[[series]]
+id = "US_PAYROLLS_RELEASE"
+source = "us_payrolls_cal"
+key = "50"  # FRED release id: Employment Situation
+freq = "event"
+units = "event"
+use = "D"
+status = "active"
+redistribution = "open"
+kind = "release"
+country = "US"
+name = "Employment Situation (payrolls)"
+time_local = "08:30"
+tz = "America/New_York"
+
+[[series]]
+id = "US_GDP_RELEASE"
+source = "bea_gdp_cal"
+key = "schedule page"
+freq = "event"
+units = "event"
+use = "D"
+status = "active"
+redistribution = "open"
+kind = "release"
+country = "US"
+name = "GDP"
+time_local = "08:30"
+tz = "America/New_York"
 
 # ---- E. Positioning & CB balance sheets --------------------------------------
 [[series]]

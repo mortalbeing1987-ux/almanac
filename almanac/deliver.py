@@ -1,7 +1,8 @@
 """One scheduled delivery pass into a checked-out PRIVATE data repo.
 
-    <data-dir>/bundles/macro-<run_id>/   new bundle (only when there are new rows)
-    <data-dir>/state/                    delivery state (see state.py)
+    <data-dir>/bundles/macro-<run_id>/   new observations (only when there are new rows)
+    <data-dir>/bundles/cal-<run_id>/     new calendar events (use case D; only new event ids)
+    <data-dir>/state/                    delivery state (see state.py; events.json for D)
     <data-dir>/status.json               freshness + per-source outcome of this run
 
 Committing and pushing the data repo is left to the workflow.
@@ -13,7 +14,7 @@ import json
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-from . import freshness, state as state_mod
+from . import calendar, freshness, state as state_mod
 from .bundle import assign_revisions, run_id_for, write_macro_bundle
 from .http import Http
 from .registry import Registry, delivered_id, keys
@@ -52,13 +53,17 @@ def since_by_source(selected: list[dict], st: state_mod.State, today: date,
 
 
 def run(reg: Registry, data_dir: Path, uses: str, http: Http | None = None,
-        now: datetime | None = None, collector=collect) -> dict:
+        now: datetime | None = None, collector=collect, cal_collector=calendar.collect) -> dict:
+    """One pass. Use case D (the event calendar) goes to a `cal-` bundle; every
+    other use case goes to the `macro-` bundle."""
     now = now or datetime.now(timezone.utc)
     today = now.date()
+    http = http or Http()
+    macro_uses = uses.replace("D", "")
     st = state_mod.load(data_dir)
-    selected = reg.select(uses)
+    selected = reg.select(macro_uses) if macro_uses else []
     since = since_by_source(selected, st, today)
-    results = collector(reg, uses, http or Http(), since, today)
+    results = collector(reg, macro_uses, http, since, today) if macro_uses else []
 
     rows = assign_revisions(results, st.delivered)
     ids_by_source: dict[str, set[str]] = {}
@@ -67,9 +72,20 @@ def run(reg: Registry, data_dir: Path, uses: str, http: Http | None = None,
     st.apply(rows, results, ids_by_source, now.isoformat(timespec="seconds"))
     fresh = freshness.summary(selected, st, today)
 
+    cal_results, cal_rows, cal_bundle = [], [], None
+    if "D" in uses:
+        cal_results = cal_collector(reg, http, today)
+        delivered_events = calendar.load_delivered(data_dir)
+        cal_rows = calendar.new_rows(cal_results, delivered_events)
+        fresh["calendar_ahead"] = calendar.calendar_ahead(cal_results, today)
+
     bundle = None
     if rows:
         bundle = write_macro_bundle(data_dir / "bundles", now, results, rows=rows, freshness=fresh)
+    if cal_rows:
+        cal_bundle = calendar.write_cal_bundle(data_dir / "bundles", now, cal_results, cal_rows,
+                                               fresh["calendar_ahead"])
+        calendar.save_delivered(delivered_events | {r["event_id"] for r in cal_rows}, data_dir)
     state_mod.save(st, data_dir)
 
     status = {
@@ -78,10 +94,15 @@ def run(reg: Registry, data_dir: Path, uses: str, http: Http | None = None,
         "uses": uses,
         "bundle": bundle.name if bundle else None,
         "rows_delivered": len(rows),
+        "cal_bundle": cal_bundle.name if cal_bundle else None,
+        "events_delivered": len(cal_rows),
         "sources": {r.source: {"status": r.status, "reason": r.reason,
                                "observations": len(r.observations),
                                "since": since.get(r.source, today).isoformat()}
                     for r in results},
+        "calendar_sources": {r.source: {"status": r.status, "reason": r.reason,
+                                        "events": len(r.events), "furthest_event": r.furthest}
+                             for r in cal_results},
         "freshness": fresh,
     }
     (data_dir / "status.json").write_text(json.dumps(status, indent=2, sort_keys=True) + "\n")

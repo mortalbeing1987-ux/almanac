@@ -72,9 +72,11 @@ class CalResult:
 
 
 def fetchers() -> dict[str, CalFetcher]:
-    from .sources import cal_boj, cal_ecb, cal_fomc, cal_rba
-    return {"fed_fomc": cal_fomc.fetch, "ecb_cal": cal_ecb.fetch,
-            "boj_cal": cal_boj.fetch, "rba_cal": cal_rba.fetch}
+    from .sources import cal_bea, cal_boj, cal_ecb, cal_fomc, cal_fred, cal_rba, cal_snb
+    return {"fed_fomc": cal_fomc.fetch, "snb_cal": cal_snb.fetch, "ecb_cal": cal_ecb.fetch,
+            "boj_cal": cal_boj.fetch, "rba_cal": cal_rba.fetch,
+            "us_cpi_cal": cal_fred.fetch, "us_payrolls_cal": cal_fred.fetch,
+            "bea_gdp_cal": cal_bea.fetch}
 
 
 def time_utc(series: dict, day: date) -> str | None:
