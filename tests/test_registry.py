@@ -42,5 +42,15 @@ def test_no_source_key_listed_twice():
     for s in REG["series"]:
         keys = s["key"] if isinstance(s["key"], list) else [s["key"]]
         for k in keys:
-            assert (s["source"], k) not in seen, (s["id"], k)
-            seen.add((s["source"], k))
+            ident = (s["source"], s.get("file"), s.get("column"), k)
+            assert ident not in seen, (s["id"], k)
+            seen.add(ident)
+
+
+def test_roles_and_release_files():
+    for s in REG["series"]:
+        assert s.get("role", "deliver") in ("deliver", "crosscheck"), s["id"]
+        if "file" in s:
+            src = REG["sources"][s["source"]]
+            assert s["file"] in src.get("files", {}), s["id"]
+            assert s.get("expect"), s["id"]

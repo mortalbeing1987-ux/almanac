@@ -65,16 +65,16 @@ url = "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QS
 secret = "BEA_API_KEY"
 auth_param = "UserID"
 
-# Research (monthly headline trade, BEA/Census release tables vs FRED) --
-# temporary probe candidates, removed once a source is chosen.
-[sources.trade_release]
-url = "TBD"
-candidates = [
-  "https://www.bea.gov/data/intl-trade-investment/international-trade-goods-and-services",
-  "https://www.bea.gov/sites/default/files/2026-09/trad0726-time-series.xlsx",
-  "https://www.bea.gov/sites/default/files/2026-09/trad0726-geo-time-series.xlsx",
-  "https://www.census.gov/foreign-trade/statistics/historical/gands.xlsx",
-]
+[sources.bea_release]
+# BEA's monthly "U.S. International Trade in Goods and Services" release files.
+# Keyless. File URLs are dated (e.g. /sites/default/files/2026-09/trad0726-...)
+# so the fetcher reads the current link from the release page, then checks the
+# workbook still has the expected table titles (`expect` per series) -- a
+# layout change is an error, never "up to date". Probe 2026-09-28: July 2026
+# release (published 2026-09-03) found and all expected labels present.
+url = "https://www.bea.gov/data/intl-trade-investment/international-trade-goods-and-services"
+base = "https://www.bea.gov"
+files = { time_series = 'trad\d{4}-time-series\.xlsx', geo = 'trad\d{4}-geo-time-series\.xlsx' }
 
 [sources.census]
 # Census international trade API: monthly goods by partner -- the original
@@ -287,14 +287,49 @@ redistribution = "open"
 
 # ---- G. Trade ----------------------------------------------------------------
 [[series]]
-id = "TRADE_TOTAL"
+id = "TRADE_MONTHLY"
+source = "bea_release"
+file = "time_series"
+# Table 1: exports, imports, balance -- total, goods (BoP), services; monthly
+# SA from 1992. Tables 2-3: services exports/imports by major category, monthly.
+key = ["Table 1", "Table 2", "Table 3"]
+expect = ["Exports, Imports, and Balances", "months seasonally adjusted",
+          "U.S. International Trade in Services by Major Category - Exports",
+          "U.S. International Trade in Services by Major Category - Imports"]
+freq = "monthly"
+units = "USD millions, seasonally adjusted"
+use = "G"
+status = "active"
+redistribution = "open"
+
+[[series]]
+id = "TRADE_BEA_EU"
+source = "bea_release"
+file = "geo"
+# European Union column of the geo workbook (the ITA API has no EU area):
+# tables 1-9 = exports/imports/balance of goods and services, goods, services.
+key = ["Table 1", "Table 2", "Table 3", "Table 4", "Table 5", "Table 6", "Table 7", "Table 8", "Table 9"]
+column = "European Union"
+expect = ["European Union", "quarters seasonally adjusted",
+          "U.S. International Trade by Selected Countries and Areas - Exports of Goods and Services",
+          "U.S. International Trade by Selected Countries and Areas - Imports of Services"]
+freq = "quarterly"
+units = "USD millions, seasonally adjusted"
+use = "G"
+status = "active"
+redistribution = "open"
+
+[[series]]
+id = "TRADE_TOTAL_XCHECK"
 source = "fred"
-# BoP basis, SA: exports G&S, imports G&S, balance G&S, balance goods
+role = "crosscheck"  # fetched and compared with TRADE_MONTHLY table 1; never delivered
+# FRED republication of the same BoP totals: exports G&S, imports G&S,
+# balance G&S, balance goods. A mismatch or a missing BEA month raises a flag.
 key = ["BOPTEXP", "BOPTIMP", "BOPGSTB", "BOPGTB"]
 freq = "monthly"
 units = "USD millions, seasonally adjusted"
 use = "G"
-status = "active"  # all four probed 200 CSV from runners 2026-09-28
+status = "active"
 redistribution = "open"
 
 [[series]]

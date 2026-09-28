@@ -103,32 +103,36 @@ def census_rows(body: bytes, pattern: str) -> str:
     return f"{len(rows) - 1} rows; " + ", ".join(hits)
 
 
-# Research pages: list links matching a pattern (hrefs only).
-LINKS = {
-    "trade_release?1": r"trad[^\"']*\.(xlsx|pdf)",
-}
-# XLSX files: report sheet names and the workbook's text labels (shared
-# strings = headers/row names), never numeric cells.
-XLSX_LABELS = {"trade_release?2", "trade_release?3", "trade_release?4"}
-
-
-def xlsx_labels(body: bytes) -> str:
+def xlsx_contents(body: bytes) -> tuple[list[str], list[str]] | None:
+    """(sheet names, text labels) of an .xlsx -- shared strings only, which hold
+    titles/headers/row names; numeric cells are never read."""
     import io
     import zipfile
     try:
         z = zipfile.ZipFile(io.BytesIO(body))
         book = z.read("xl/workbook.xml").decode("utf-8", "replace")
-        sheets = re.findall(r'<sheet [^>]*name="([^"]+)"', book)
-        strings = []
-        if "xl/sharedStrings.xml" in z.namelist():
-            ss = z.read("xl/sharedStrings.xml").decode("utf-8", "replace")
-            strings = [re.sub(r"<[^>]+>", "", s).strip()
-                       for s in re.findall(r"<si>(.*?)</si>", ss, re.S)]
-    except (zipfile.BadZipFile, KeyError) as e:
-        return f"unreadable ({type(e).__name__})"
-    labels = [s for s in dict.fromkeys(strings) if s and not re.fullmatch(r"[\d.,()\s-]+", s)]
-    return (f"{len(sheets)} sheets: " + "; ".join(sheets)[:700]
-            + f" || {len(labels)} labels, first: " + " | ".join(labels[:60])[:1800])
+        ss = (z.read("xl/sharedStrings.xml").decode("utf-8", "replace")
+              if "xl/sharedStrings.xml" in z.namelist() else "")
+    except (zipfile.BadZipFile, KeyError):
+        return None
+    sheets = re.findall(r'<sheet [^>]*name="([^"]+)"', book)
+    labels = [re.sub(r"<[^>]+>", "", x).strip() for x in re.findall(r"<si>(.*?)</si>", ss, re.S)]
+    return sheets, labels
+
+
+def release_files(reg: dict, name: str, page: bytes) -> list[tuple[str, str, list[str]]]:
+    """For a source with `files` (link patterns on its release page): the
+    (file name, absolute url, expected labels) of each current file."""
+    src = reg["sources"][name]
+    html = page.decode("utf-8", "replace")
+    out = []
+    for fname, pattern in src["files"].items():
+        m = re.search(r'href="([^"]*' + pattern + r')"', html)
+        expect = [e for s in reg["series"] if s["source"] == name and s.get("file") == fname
+                  for e in s.get("expect", [])]
+        url = (m.group(1) if m.group(1).startswith("http") else src["base"] + m.group(1)) if m else ""
+        out.append((fname, url, expect))
+    return out
 
 
 # HTML answers where an API was expected: print the page <title> only.
@@ -237,11 +241,25 @@ def main() -> int:
         if label in TITLES and cells[3] == "html":
             m = re.search(rb"<title[^>]*>(.*?)</title>", body, re.I | re.S)
             details.append(f"- {label} page title: {m.group(1).decode('utf-8', 'replace').strip()[:120] if m else 'none'}")
-        if label in LINKS:
-            hrefs = dict.fromkeys(re.findall(r'href="([^"]*' + LINKS[label] + r')"', body.decode("utf-8", "replace"), re.I))
-            details.append(f"- {label} links: " + (", ".join(h if isinstance(h, str) else h[0] for h in hrefs)[:900] or "none"))
-        if label in XLSX_LABELS and body:
-            details.append(f"- {label} xlsx: {xlsx_labels(body)}")
+        if "files" in src and label in reg["sources"]:
+            for fname, furl, expect in release_files(reg, label, body):
+                flabel = f"{label}:{fname}"
+                if not furl:
+                    lines.append(f"| {flabel} | link not found on release page | | | | | |")
+                    continue
+                time.sleep(1)
+                fcells, fbody = probe(furl)
+                lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(flabel, *fcells))
+                got = xlsx_contents(fbody)
+                if got is None:
+                    details.append(f"- {flabel}: not a readable xlsx")
+                    continue
+                sheets, labels = got
+                text = "\n".join(labels)
+                missing = [e for e in expect if e not in text]
+                details.append(f"- {flabel}: {furl.rsplit('/', 1)[-1]}, {len(sheets)} sheets, "
+                               f"expected labels {len(expect) - len(missing)}/{len(expect)}"
+                               + (f", MISSING: {missing}" if missing else ""))
         if label in CENSUS_ROWS and cells[3] == "json":
             details.append(f"- {label}: {census_rows(body, CENSUS_ROWS[label])}")
         if label in LISTS:
