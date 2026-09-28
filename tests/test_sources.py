@@ -147,7 +147,8 @@ ROUTES = {
     "daily-treasury-rates.csv/": "treasury_2026.csv", "/api/rates/": "nyfed_sofr.json",
     "data-api.ecb.europa.eu": "ecb_estr.csv", "cube/snbgwdzid": "snb_snbgwdzid.csv",
     "getDataCode": "boj_page2.csv", "f1-data.csv": "rba_f1.csv",
-    "eservices.mas.gov.sg": "mas_rates.json",
+    "eservices.mas.gov.sg": "mas_rates.json", "bankofcanada.ca/valet/": "boc_corra.csv",
+    "boeapps/database/": "boe_sonia.csv",
 }
 
 
@@ -158,12 +159,13 @@ def test_collect_A_and_B_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setenv("MAS_API_KEY", "k")
     results = collect(REG, "AB", FakeHttp(ROUTES), SINCE, TODAY)
     status = {r.source: r.status for r in results}
-    assert status == {"boj": "ok", "ecb": "ok", "fred": "error", "mas": "ok",
+    assert status == {"boc": "ok", "boe": "ok", "boj": "ok", "ecb": "ok", "fred": "error", "mas": "ok",
                       "nyfed": "ok", "rba": "ok", "snb": "ok", "treasury": "ok"}
     path = write_macro_bundle(tmp_path, datetime(2026, 9, 28, 21, 0, tzinfo=timezone.utc), results)
     table = pq.read_table(path / "observations.parquet").to_pylist()
     assert {r["series_id"] for r in table} >= {"SOFR", "EFFR", "ESTR", "SARON", "TONA",
-                                                "RBA_CASH", "SORA", "UST_PAR_CURVE_10Y"}
+                                                "RBA_CASH", "SORA", "CORRA", "SONIA",
+                                                "UST_PAR_CURVE_10Y"}
     assert all(r["obs_date"] >= "2026-09-20" and r["revision"] == 0 for r in table)
     manifest = json.loads((path / "manifest.json").read_text())
     assert manifest["sources"]["fred"]["status"] == "error"
