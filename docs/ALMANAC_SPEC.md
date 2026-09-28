@@ -13,7 +13,8 @@ brokerage API doesn't provide (or provides poorly):
 | **C. Regime** | VIX, VIX3M, VVIX, HY OAS, 10y–3m and 10y–2y spreads, NFCI, broad USD index, initial jobless claims |
 | **D. Event calendar** | FOMC; SNB, ECB, BoJ, RBA and MAS policy decisions; US CPI, payrolls, GDP release dates |
 | **E. Positioning & CB balance sheets** | CFTC Commitments of Traders (currency futures), SNB sight deposits |
-| **F. Long-run backdrop** | CPI (headline/core), CAPE / earnings yield (source to be found) |
+| **F. Long-run backdrop** | CPI (headline/core) — CAPE dropped in step 0 |
+| **G. Trade** | US exports, imports and balance plus services by category (BEA monthly release workbook; FRED kept as a cross-check only); goods by partner incl. South Korea (Census API, monthly); goods and services by partner (BEA ITA API, quarterly; EU from BEA's geo workbook) — inputs for GDP, FX and sector views |
 
 Consumers (analysis, dashboards, reports) live **outside** this repo. Almanac
 only collects, validates and delivers.
@@ -89,8 +90,10 @@ answered instantly to an honest script User-Agent — always send
 runners. If FRED ever requires its (free) API key, the owner adds it as secret
 `FRED_API_KEY`. BLS's schedule
 page returned 403 (use another official schedule source or FRED release
-dates). BoJ (TONA), RBA, MAS (SORA) and the maintained CAPE source: find in
-step 0. The original Yale Shiller spreadsheet stopped updating in 2023-09.
+dates). Step 0 outcome (2026-09-28, from GitHub's runners): TONA from the BoJ
+Time-Series Data Search API (keyless CSV), RBA cash rate from statistical
+table F1 (keyless CSV), SARON from SNB cube `snbgwdzid`, SORA from the MAS API
+gateway with the owner's free key (secret `MAS_API_KEY`). CAPE dropped.
 
 ## Build steps (stop for owner review after each)
 

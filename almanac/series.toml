@@ -7,22 +7,26 @@
 #   key       the source's own identifier for the series
 #   freq      daily | weekly | monthly | event
 #   units     what `value` means
-#   use       use-case tag from docs/ALMANAC_SPEC.md (A-F)
+#   use       use-case tag from docs/ALMANAC_SPEC.md (A-G)
 #   status    active | tbd (source/key not verified yet -- step 0)
 #   redistribution  open | restricted  (restricted = never publish values)
+#
+# url templates: {key} registry key, {since} earliest date wanted (YYYY-MM-DD),
+# {n} number of days wanted, {year}/{prev_year} calendar years.
+# Delivered series_id: the registry id, or `<id>_<key>` when `key` is a list.
 
 [sources.fred]
-url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={key}"
+url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={key}&cosd={since}"
 note = "keyless; send an honest script User-Agent (a fake browser UA timed out 2026-09-28); API key fallback = secret FRED_API_KEY"
 
 [sources.treasury]
 url = "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/{year}/all?type=daily_treasury_yield_curve&field_tdr_date_value={year}&page&_format=csv"
 
 [sources.nyfed]
-url = "https://markets.newyorkfed.org/api/rates/{key}/last/5.json"
+url = "https://markets.newyorkfed.org/api/rates/{key}/last/{n}.json"  # n = days wanted
 
 [sources.ecb]
-url = "https://data-api.ecb.europa.eu/service/data/{key}?format=csvdata&lastNObservations=5"
+url = "https://data-api.ecb.europa.eu/service/data/{key}?format=csvdata&startPeriod={since}"
 
 [sources.snb]
 url = "https://data.snb.ch/api/cube/{key}/data/csv/en"
@@ -37,13 +41,59 @@ url = "https://www.cftc.gov/dea/newcot/deafut.txt"
 url = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
 
 [sources.boj]
-url = "TBD"
+url = "https://www.stat-search.boj.or.jp/api/v1/getDataCode?format=csv&lang=en&db=FM01&code={key}"
+note = "BoJ Time-Series Data Search API, keyless CSV; full history per call (~1.3 MB), narrow with startDate in the fetcher"
+
 [sources.rba]
-url = "TBD"
+url = "https://www.rba.gov.au/statistics/tables/csv/f1-data.csv"
+note = "RBA statistical table F1 (money market, daily); series ids in the header rows; served as application/octet-stream"
+
+# TBD sources: `candidates` are probed by scripts/probe_sources.py; the one that
+# works from GitHub's runners becomes `url`.
 [sources.mas]
-url = "TBD"
-[sources.cape]
-url = "TBD"
+url = "https://eservices.mas.gov.sg/apimg-gw/server/monthly_statistical_bulletin_non610mssql/domestic_interest_rates_daily/views/domestic_interest_rates_daily"
+# MAS API gateway (APIMG): free key from https://eservices.mas.gov.sg/apimg-portal/,
+# stored ONLY as the GitHub Actions secret named below and sent in `auth_header`.
+secret = "MAS_API_KEY"
+auth_header = "KeyId"
+note = "keyless routes are gone; keyed call returns full history as JSON (~6.8 MB, ~18 s) -- filter by date in the fetcher"
+
+# TBD sources: `candidates` are probed by scripts/probe_sources.py; the one that
+# works from GitHub's runners becomes `url`.
+[sources.bea]
+# BEA API, International Transactions (ITA): quarterly by partner. Free key,
+# stored ONLY as Actions secret BEA_API_KEY, sent as the UserID query param.
+# Probe 2026-09-28: frequencies A/QNSA/QSA only (no monthly); country names
+# like SouthKorea; AreaOrCountry=AllCountries returns the world total only.
+url = "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year={prev_year}&ResultFormat=JSON&Indicator={key}&AreaOrCountry={area}"
+secret = "BEA_API_KEY"
+auth_param = "UserID"
+
+[sources.bea_release]
+# BEA's monthly "U.S. International Trade in Goods and Services" release files.
+# Keyless. File URLs are dated (e.g. /sites/default/files/2026-09/trad0726-...)
+# so the fetcher reads the current link from the release page, then checks the
+# workbook still has the expected table titles (`expect` per series) -- a
+# layout change is an error, never "up to date". Probe 2026-09-28: July 2026
+# release (published 2026-09-03) found and all expected labels present.
+url = "https://www.bea.gov/data/intl-trade-investment/international-trade-goods-and-services"
+base = "https://www.bea.gov"
+files = { time_series = 'trad\d{4}-time-series\.xlsx', geo = 'trad\d{4}-geo-time-series\.xlsx' }
+
+[sources.census]
+# Census international trade API: monthly goods by partner -- the original
+# source behind FRED's EXP*/IMP*. Free key, stored ONLY as Actions secret
+# CENSUS_API_KEY, sent as the `key` query param. Probe 2026-09-28 (keyed,
+# 2026-06): 249 export / 252 import partner rows, all our partners present.
+# {flow} = exports | imports; {field} = ALL_VAL_MO (exports, FAS) | GEN_VAL_MO
+# (general imports, customs); one call per flow per month returns all partners.
+url = "https://api.census.gov/data/timeseries/intltrade/{flow}/hs?get=CTY_CODE,CTY_NAME,{field}&time={month}"
+secret = "CENSUS_API_KEY"
+auth_param = "key"
+candidates = [
+  "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO&time=2026-06",
+  "https://api.census.gov/data/timeseries/intltrade/imports/hs?get=CTY_CODE,CTY_NAME,GEN_VAL_MO&time=2026-06",
+]
 
 # ---- A. Curve & credit -------------------------------------------------------
 [[series]]
@@ -63,7 +113,7 @@ key = ["DGS1MO", "DGS3MO", "DGS6MO", "DGS1", "DGS2", "DGS3", "DGS5", "DGS7", "DG
 freq = "daily"
 units = "percent"
 use = "A"
-status = "tbd"
+status = "active"
 redistribution = "open"
 
 [[series]]
@@ -74,7 +124,7 @@ key = ["BAMLC0A0CM", "BAMLC0A1CAAA", "BAMLC0A2CAA", "BAMLC0A3CA", "BAMLC0A4CBBB"
 freq = "daily"
 units = "percent"
 use = "A"
-status = "tbd"
+status = "active"
 redistribution = "restricted"
 
 [[series]]
@@ -84,7 +134,7 @@ key = ["DFII5", "DFII10", "T5YIE", "T10YIE"]
 freq = "daily"
 units = "percent"
 use = "A"
-status = "tbd"
+status = "active"
 redistribution = "open"
 
 # ---- B. Funding & carry inputs -----------------------------------------------
@@ -121,42 +171,43 @@ redistribution = "open"
 [[series]]
 id = "SARON"
 source = "snb"
-key = "TBD"
+key = "snbgwdzid"  # SNB official rates cube (zimoma also has SARON, zirepo does not)
+column = "SARON"   # D0 dimension code within the cube
 freq = "daily"
 units = "percent"
 use = "B"
-status = "tbd"
+status = "active"
 redistribution = "open"
 
 [[series]]
 id = "TONA"
 source = "boj"
-key = "TBD"
+key = "STRDCLUCON"  # FM01: uncollateralized overnight call rate, average (= TONA)
 freq = "daily"
 units = "percent"
 use = "B"
-status = "tbd"
+status = "active"
 redistribution = "open"
 
 [[series]]
 id = "RBA_CASH"
 source = "rba"
-key = "TBD"
+key = "FIRMMCRTD"  # cash rate target
 freq = "daily"
 units = "percent"
 use = "B"
-status = "tbd"
+status = "active"
 redistribution = "open"
 
 [[series]]
 id = "SORA"
 source = "mas"
-key = "TBD"
+key = "sora"  # JSON field; keyed probe 2026-09-28: 200, body mentions sora. Exact field confirmed in step 1
 freq = "daily"
 units = "percent"
 use = "B"
-status = "tbd"
-redistribution = "open"
+status = "active"
+redistribution = "restricted"  # owner decision 2026-09-28: MAS API terms not reviewed; treat as restricted
 
 # ---- C. Regime ---------------------------------------------------------------
 [[series]]
@@ -172,11 +223,23 @@ redistribution = "restricted"
 [[series]]
 id = "REGIME_FRED"
 source = "fred"
-key = ["T10Y3M", "T10Y2Y", "NFCI", "DTWEXBGS", "ICSA"]
+key = ["T10Y3M", "T10Y2Y", "NFCI", "ICSA"]
 freq = "mixed (daily/weekly per key)"
 units = "per FRED"
 use = "C"
-status = "tbd"
+status = "active"
+redistribution = "open"
+
+[[series]]
+id = "USD_INDEX"
+source = "fred"
+# Fed H.10 nominal trade-weighted USD indexes: broad, advanced foreign
+# economies, emerging market economies
+key = ["DTWEXBGS", "DTWEXAFEGS", "DTWEXEMEGS"]
+freq = "daily"
+units = "index, Jan 2006 = 100"
+use = "C"
+status = "active"  # all three probed 200 CSV from runners 2026-09-28
 redistribution = "open"
 
 # ---- D. Event calendar -------------------------------------------------------
@@ -221,15 +284,103 @@ key = ["CPIAUCSL", "CPILFESL", "UNRATE", "PAYEMS"]
 freq = "monthly"
 units = "per FRED"
 use = "F"
-status = "tbd"
+status = "active"
+redistribution = "open"
+
+# CAPE dropped in step 0 (owner decision 2026-09-28): declining usefulness, and
+# no stable machine-readable official source (shillerdata.com xls link moves).
+
+# ---- G. Trade ----------------------------------------------------------------
+[[series]]
+id = "TRADE_MONTHLY"
+source = "bea_release"
+file = "time_series"
+# Table 1: exports, imports, balance -- total, goods (BoP), services; monthly
+# SA from 1992. Tables 2-3: services exports/imports by major category, monthly.
+key = ["Table 1", "Table 2", "Table 3"]
+expect = ["Exports, Imports, and Balances", "months seasonally adjusted",
+          "U.S. International Trade in Services by Major Category - Exports",
+          "U.S. International Trade in Services by Major Category - Imports"]
+freq = "monthly"
+units = "USD millions, seasonally adjusted"
+use = "G"
+status = "active"
 redistribution = "open"
 
 [[series]]
-id = "CAPE"
-source = "cape"
-key = "TBD"
+id = "TRADE_BEA_EU"
+source = "bea_release"
+file = "geo"
+# European Union column of the geo workbook (the ITA API has no EU area):
+# tables 1-9 = exports/imports/balance of goods and services, goods, services.
+key = ["Table 1", "Table 2", "Table 3", "Table 4", "Table 5", "Table 6", "Table 7", "Table 8", "Table 9"]
+column = "European Union"
+expect = ["European Union", "quarters seasonally adjusted",
+          "U.S. International Trade by Selected Countries and Areas - Exports of Goods and Services",
+          "U.S. International Trade by Selected Countries and Areas - Imports of Services"]
+freq = "quarterly"
+units = "USD millions, seasonally adjusted"
+use = "G"
+status = "active"
+redistribution = "open"
+
+[[series]]
+id = "TRADE_TOTAL_XCHECK"
+source = "fred"
+role = "crosscheck"  # fetched and compared with TRADE_MONTHLY table 1; never delivered
+# FRED republication of the same BoP totals: exports G&S, imports G&S,
+# balance G&S, balance goods. A mismatch or a missing BEA month raises a flag.
+key = ["BOPTEXP", "BOPTIMP", "BOPGSTB", "BOPGTB"]
 freq = "monthly"
-units = "ratio"
-use = "F"
-status = "tbd"
+units = "USD millions, seasonally adjusted"
+use = "G"
+status = "active"
+redistribution = "open"
+
+[[series]]
+id = "TRADE_CENSUS"
+source = "census"
+# Monthly goods trade by partner (exports FAS, general imports customs), NSA,
+# USD. Keys are Census CTY_CODEs; "-" = total for all countries.
+# Delivered id: TRADE_CENSUS_<EXP|IMP>_<code>. Replaces FRED's EXP*/IMP*
+# (same Census data, adds South Korea). HS/NAICS sector detail: later step.
+key = [
+  "-",     # World
+  "0003",  # European Union
+  "1220",  # Canada
+  "2010",  # Mexico
+  "4120",  # United Kingdom
+  "4280",  # Germany
+  "4419",  # Switzerland
+  "5330",  # India
+  "5520",  # Vietnam
+  "5590",  # Singapore
+  "5700",  # China
+  "5800",  # South Korea
+  "5830",  # Taiwan
+  "5880",  # Japan
+]
+flows = { exports = "ALL_VAL_MO", imports = "GEN_VAL_MO" }
+freq = "monthly"
+units = "USD, not seasonally adjusted"
+use = "G"
+status = "active"
+redistribution = "open"
+
+[[series]]
+id = "TRADE_BEA"
+source = "bea"
+# Goods and services, exports and imports, by partner (BoP basis, quarterly SA).
+# Combined G&S (ExpGdsServ) returned no rows for SouthKorea, so goods and
+# services are collected separately. Delivered id: TRADE_BEA_<Indicator>_<Area>.
+key = ["ExpGds", "ImpGds", "ExpServ", "ImpServ"]
+# Probe 2026-09-28 (QSA, 2025): all 4 indicators x these 13 areas returned 4
+# quarters. EuroArea/Europe answered with ~1.3 KB (no data rows) -- left out.
+areas = ["AllCountries", "Canada", "Mexico", "China", "Japan", "Germany",
+         "UnitedKingdom", "SouthKorea", "Taiwan", "Vietnam", "India", "Switzerland",
+         "Singapore"]
+freq = "quarterly"
+units = "USD millions, seasonally adjusted"
+use = "G"
+status = "active"
 redistribution = "open"
