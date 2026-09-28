@@ -61,7 +61,6 @@ MARKERS = {
     "boj": "STRDCLUCON",
     "rba": "FIRMMCRTD",
     "mas": "sora",
-    "cape?1": "ie_data",
 }
 
 

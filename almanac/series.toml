@@ -54,16 +54,6 @@ secret = "MAS_API_KEY"
 auth_header = "KeyId"
 note = "keyless routes are gone (legacy datastore API returns HTML; gateway 401 without a key)"
 
-# TBD sources: `candidates` are probed by scripts/probe_sources.py; the one that
-# works from GitHub's runners becomes `url`.
-[sources.cape]
-url = "TBD"
-note = """probe 2026-09-28: shillerdata.com (Shiller's official continuation) is reachable and links ie_data.xls,
-but the file sits on a CDN URL that changes; a fetcher must read the link from the page and needs an .xls reader."""
-candidates = [
-  "https://shillerdata.com/",
-]
-
 # ---- A. Curve & credit -------------------------------------------------------
 [[series]]
 id = "UST_PAR_CURVE"
@@ -243,12 +233,5 @@ use = "F"
 status = "active"
 redistribution = "open"
 
-[[series]]
-id = "CAPE"
-source = "cape"
-key = "TBD"
-freq = "monthly"
-units = "ratio"
-use = "F"
-status = "tbd"
-redistribution = "open"
+# CAPE dropped in step 0 (owner decision 2026-09-28): declining usefulness, and
+# no stable machine-readable official source (shillerdata.com xls link moves).
