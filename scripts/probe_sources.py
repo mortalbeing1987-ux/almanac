@@ -71,7 +71,10 @@ MARKERS = {
 
 # Catalog searches: print (id | title) of entries whose title mentions the
 # term, so a dataset id can be picked. Catalog metadata only, never values.
-DISCOVER = {"mas?5": "sora", "mas?6": "sora"}
+DISCOVER = {"mas?5": "sora", "mas?6": "sora|overnight|interest rate"}
+# Catalog listings that are paged (data.gov.sg v2 ignores ?query=): walk
+# every page, politely, and search the titles.
+PAGED = {"mas?6": 300}
 
 
 def discover(body: bytes, term: str) -> list[str]:
@@ -85,7 +88,7 @@ def discover(body: bytes, term: str) -> list[str]:
         if isinstance(o, dict):
             title = str(o.get("title") or o.get("name") or "")
             ident = o.get("datasetId") or o.get("id")
-            if ident and term in title.lower():
+            if ident and any(t in title.lower() for t in term.split("|")):
                 found.add(f"{ident} | {title[:80]}")
             for v in o.values():
                 walk(v)
@@ -94,7 +97,7 @@ def discover(body: bytes, term: str) -> list[str]:
                 walk(v)
 
     walk(doc)
-    return sorted(found)[:20]
+    return sorted(found)
 
 
 def sniff(body: bytes) -> str:
@@ -142,8 +145,18 @@ def main() -> int:
         cells, body = probe(url, MARKERS.get(label, ""))
         lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
         if label in DISCOVER:
-            hits = discover(body, DISCOVER[label])
-            catalog.append(f"- {label}: " + ("; ".join(hits) if hits else "no catalog matches"))
+            hits = set(discover(body, DISCOVER[label]))
+            note = ""
+            for page in range(2, PAGED.get(label, 0) + 1):
+                time.sleep(1)
+                cells, body = probe(f"{url}&page={page}")
+                if cells[0] != "200" or b'"datasetId"' not in body:
+                    note = f" (listing ended at page {page}: {cells[0]})"
+                    break
+                hits.update(discover(body, DISCOVER[label]))
+            shown = sorted(hits)[:60]
+            catalog.append(f"- {label}{note}: "
+                           + ("; ".join(shown) if shown else "no catalog matches"))
         time.sleep(1)  # one request at a time, politely
     table = "\n".join(lines)
     if catalog:
