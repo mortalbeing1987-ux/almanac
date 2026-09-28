@@ -9,9 +9,7 @@ data itself, so the public workflow log carries no restricted values.
 
 from __future__ import annotations
 
-import json
 import os
-import re
 import sys
 import time
 import tomllib
@@ -57,70 +55,14 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     return out
 
 
-# Marker strings a candidate's body must contain for the right series to be
-# there. Only "yes"/"no" is reported, never the surrounding values.
+# Marker strings a body must contain for the right series to be there.
+# Only "yes"/"no" is reported, never the surrounding values.
 MARKERS = {
     "boj": "STRDCLUCON",
     "rba": "FIRMMCRTD",
-    "mas?1": "sora",
-    "mas?2": "sora",
-    "mas?4": "sora",
-    "mas?5": "sora",
-    "mas?6": "sora",
+    "mas": "sora",
     "cape?1": "ie_data",
 }
-
-# Catalog searches: print (id | title) of entries whose title mentions the
-# term, so a dataset id can be picked. Catalog metadata only, never values.
-DISCOVER = {"mas?5": "sora", "mas?6": "sora|overnight|interest rate"}
-# Catalog listings that are paged (data.gov.sg v2 ignores ?query=): walk
-# every page, politely, and search the titles.
-PAGED = {"mas?6": 300}
-
-
-# HTML pages whose layout (form controls, download links, table headers) is
-# reported so a fetcher can be designed. Layout only, never cell values.
-STRUCTURE = {"mas?2"}
-
-
-def structure(body: bytes) -> str:
-    html = body.decode("utf-8", "replace")
-    controls = sorted(set(re.findall(r'<(?:select|input|button)[^>]*\bname="([^"]+)"', html, re.I)))
-    links = sorted(set(h for h in re.findall(r'href="([^"]+)"', html, re.I)
-                       if re.search(r"download|csv|xls|export", h, re.I)))
-    headers = [re.sub(r"<[^>]+>|\s+", " ", h).strip()
-               for h in re.findall(r"<th[^>]*>(.*?)</th>", html, re.I | re.S)]
-    return "; ".join([
-        f"tables={len(re.findall(r'<table', html, re.I))}",
-        f"forms={len(re.findall(r'<form', html, re.I))}",
-        f"viewstate={'yes' if '__VIEWSTATE' in html else 'no'}",
-        "controls=" + ", ".join(c for c in controls if not c.startswith("__"))[:600],
-        "links=" + ", ".join(links)[:400],
-        "headers=" + " | ".join(dict.fromkeys(h for h in headers if h))[:600],
-    ])
-
-
-def discover(body: bytes, term: str) -> list[str]:
-    try:
-        doc = json.loads(body)
-    except ValueError:
-        return []
-    found: set[str] = set()
-
-    def walk(o: object) -> None:
-        if isinstance(o, dict):
-            title = str(o.get("title") or o.get("name") or "")
-            ident = o.get("datasetId") or o.get("id")
-            if ident and any(t in title.lower() for t in term.split("|")):
-                found.add(f"{ident} | {title[:80]}")
-            for v in o.values():
-                walk(v)
-        elif isinstance(o, list):
-            for v in o:
-                walk(v)
-
-    walk(doc)
-    return sorted(found)
 
 
 def sniff(body: bytes) -> str:
@@ -139,10 +81,22 @@ def sniff(body: bytes) -> str:
     return "other"
 
 
-def probe(url: str, marker: str = "") -> tuple[tuple[str, ...], bytes]:
-    """(table cells, body). The body is only inspected, never printed."""
+def auth_headers(src: dict) -> dict[str, str] | None:
+    """Header carrying a source's API key, read from the Actions secret's env var.
+
+    None means the source needs a secret that is not set. The key is only ever
+    placed in the request header -- never printed, logged or returned elsewhere.
+    """
+    secret = src.get("secret")
+    if not secret:
+        return {}
+    key = os.environ.get(secret, "")
+    return {src["auth_header"]: key} if key else None
+
+
+def probe(url: str, marker: str = "", extra: dict[str, str] | None = None) -> tuple[str, ...]:
     t0 = time.monotonic()
-    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    req = urllib.request.Request(url, headers={"User-Agent": UA, **(extra or {})})
     try:
         with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
             body = r.read()
@@ -153,39 +107,26 @@ def probe(url: str, marker: str = "") -> tuple[tuple[str, ...], bytes]:
         status, ctype, body = f"ERR {type(e).__name__}", "", b""
     found = ("yes" if marker.lower().encode() in body.lower() else "no") if marker else ""
     return (status, f"{len(body):,}", ctype.split(";")[0], sniff(body),
-            f"{marker} {found}".strip(), f"{time.monotonic() - t0:.1f}s"), body
+            f"{marker} {found}".strip(), f"{time.monotonic() - t0:.1f}s")
 
 
 def main() -> int:
     reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
     lines = ["| source | status | bytes | type | body | marker | time |",
              "|---|---|---|---|---|---|---|"]
-    catalog: list[str] = []
     for label, url in probe_urls(reg):
         if not url:
             lines.append(f"| {label} | TBD (no url yet) | | | | | |")
             continue
-        cells, body = probe(url, MARKERS.get(label, ""))
-        lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
-        if label in STRUCTURE:
-            catalog.append(f"- {label} layout: {structure(body)}")
-        if label in DISCOVER:
-            hits = set(discover(body, DISCOVER[label]))
-            note = ""
-            for page in range(2, PAGED.get(label, 0) + 1):
-                time.sleep(1)
-                cells, body = probe(f"{url}&page={page}")
-                if cells[0] != "200" or b'"datasetId"' not in body:
-                    note = f" (listing ended at page {page}: {cells[0]})"
-                    break
-                hits.update(discover(body, DISCOVER[label]))
-            shown = sorted(hits)[:60]
-            catalog.append(f"- {label}{note}: "
-                           + ("; ".join(shown) if shown else "no catalog matches"))
+        src = reg["sources"].get(label.split("?")[0].split(":")[0], {})
+        extra = auth_headers(src)
+        if extra is None:
+            lines.append(f"| {label} | needs secret {src['secret']} (not set; not requested) | | | | | |")
+            continue
+        lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(
+            label, *probe(url, MARKERS.get(label, ""), extra)))
         time.sleep(1)  # one request at a time, politely
     table = "\n".join(lines)
-    if catalog:
-        table += "\n\nDetails (catalog matches, page layouts):\n" + "\n".join(catalog)
     print(table)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:

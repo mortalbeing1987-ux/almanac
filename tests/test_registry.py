@@ -28,3 +28,10 @@ def test_active_series_have_real_sources():
         if s["status"] == "active":
             assert REG["sources"][s["source"]]["url"] != "TBD", s["id"]
             assert s["key"] != "TBD", s["id"]
+
+
+def test_keyed_sources_name_their_secret_and_header():
+    for name, src in REG["sources"].items():
+        if "secret" in src:
+            assert src["secret"].isupper() and src["secret"].endswith("_API_KEY"), name
+            assert src.get("auth_header"), name

@@ -47,19 +47,15 @@ note = "RBA statistical table F1 (money market, daily); series ids in the header
 # TBD sources: `candidates` are probed by scripts/probe_sources.py; the one that
 # works from GitHub's runners becomes `url`.
 [sources.mas]
-url = "TBD"
-note = """probe 2026-09-28: legacy eservices datastore API now returns an HTML page (no data);
-the MAS API gateway returns 401 (needs a registered key); only the HTML form page carries SORA.
-Owner decision: free MAS API key as secret MAS_API_KEY, or parse the official HTML page."""
-candidates = [
-  "https://eservices.mas.gov.sg/api/action/datastore/search.json?resource_id=9a0bf149-308c-4bd2-832d-76c8e6cb47ed&limit=5",
-  "https://eservices.mas.gov.sg/statistics/dir/domesticinterestrates.aspx",
-  "https://eservices.mas.gov.sg/apimg-gw/server/monthly_statistical_bulletin_non610mssql/domestic_interest_rates_daily/views/domestic_interest_rates_daily",
-  # data.gov.sg (Singapore's official open-data portal; MAS publishes there)
-  "https://data.gov.sg/api/action/datastore_search?resource_id=9a0bf14e-15e3-424e-973d-2338f019b53f&limit=5",
-  "https://data.gov.sg/api/action/package_search?q=SORA",
-  "https://api-production.data.gov.sg/v2/public/api/datasets?query=SORA",
-]
+url = "https://eservices.mas.gov.sg/apimg-gw/server/monthly_statistical_bulletin_non610mssql/domestic_interest_rates_daily/views/domestic_interest_rates_daily"
+# MAS API gateway (APIMG): free key from https://eservices.mas.gov.sg/apimg-portal/,
+# stored ONLY as the GitHub Actions secret named below and sent in `auth_header`.
+secret = "MAS_API_KEY"
+auth_header = "KeyId"
+note = "keyless routes are gone (legacy datastore API returns HTML; gateway 401 without a key)"
+
+# TBD sources: `candidates` are probed by scripts/probe_sources.py; the one that
+# works from GitHub's runners becomes `url`.
 [sources.cape]
 url = "TBD"
 note = """probe 2026-09-28: shillerdata.com (Shiller's official continuation) is reachable and links ie_data.xls,
@@ -174,11 +170,11 @@ redistribution = "open"
 [[series]]
 id = "SORA"
 source = "mas"
-key = "TBD"
+key = "sora"  # response field name; confirm on the first keyed probe
 freq = "daily"
 units = "percent"
 use = "B"
-status = "tbd"
+status = "tbd"  # -> active once the probe returns 200 with secret MAS_API_KEY set
 redistribution = "open"
 
 # ---- C. Regime ---------------------------------------------------------------

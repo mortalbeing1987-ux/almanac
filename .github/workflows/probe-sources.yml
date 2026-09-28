@@ -16,4 +16,8 @@ jobs:
         with:
           python-version: "3.12"
       - name: Probe sources (status only, no data logged)
+        env:
+          # Owner-added Actions secret; the probe only puts it in a request
+          # header and never prints it. Empty if not set -> MAS is skipped.
+          MAS_API_KEY: ${{ secrets.MAS_API_KEY }}
         run: python scripts/probe_sources.py
