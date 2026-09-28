@@ -488,12 +488,40 @@ max_age_days = 10
 [[series]]
 id = "CPI"
 source = "fred"
-key = ["CPIAUCSL", "CPILFESL", "UNRATE", "PAYEMS"]
-freq = "monthly"
-units = "per FRED"
+# US CPI-U all items SA and NSA, core SA (BLS); unemployment rate and nonfarm
+# payrolls SA (BLS Employment Situation). History (probe 2026-09-28):
+# CPIAUCNS 1913, PAYEMS 1939, CPIAUCSL 1947, UNRATE 1948, CPILFESL 1957.
+key = ["CPIAUCSL", "CPIAUCNS", "CPILFESL", "UNRATE", "PAYEMS"]
+freq = "monthly"  # obs_date = first day of the month
+units = "per FRED (index 1982-84=100; percent; thousands of persons)"
 use = "F"
 status = "active"
 redistribution = "open"
+backfill = "full"  # FRED's latest vintage, not what was known at the time (see spec)
+# Revision look-back (lookback_days), per BLS:
+# - seasonally adjusted CPI (CPIAUCSL, CPILFESL): seasonal factors are
+#   recalculated each year with the January CPI; SA indexes of the previous
+#   5 years may be revised
+# - UNRATE: CPS seasonal factors re-estimated each year; the previous 5 years
+#   of SA data are revised in January
+# - PAYEMS: monthly estimates revised twice; the annual benchmark (with
+#   January data, in February) revises 21 months of NSA data, and 5 years of
+#   SA data are re-seasonally-adjusted -- so SA payrolls also need 5 years
+# - CPIAUCNS: final when issued (monthly default look-back)
+# 5 years + a quarter = 1920 days. A series is fetched from its earliest key's
+# start, so CPIAUCNS is re-read as far back too (any change would be delivered).
+# Freshness (max_age_days): the latest value (dated the 1st of its month) is
+# superseded by the next release. FRED release calendar 2025-01..2026-12
+# (probe 2026-09-28): CPI up to 75 days before the next release (72-74
+# typical), Employment Situation up to 72 (65-68 typical), outside the
+# Oct-Nov 2025 shutdown (108 and 111 days -- genuinely late, flagged stale).
+# Limits = measured maximum + 3 days for weekend/holiday shifts.
+[series.per_key]  # (belongs to CPI above)
+CPIAUCSL = { lookback_days = 1920, max_age_days = 78 }
+CPIAUCNS = { max_age_days = 78 }
+CPILFESL = { lookback_days = 1920, max_age_days = 78 }
+UNRATE = { lookback_days = 1920, max_age_days = 75 }
+PAYEMS = { lookback_days = 1920, max_age_days = 75 }
 
 # CAPE dropped in step 0 (owner decision 2026-09-28): declining usefulness, and
 # no stable machine-readable official source (shillerdata.com xls link moves).

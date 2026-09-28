@@ -13,7 +13,7 @@ brokerage API doesn't provide (or provides poorly):
 | **C. Regime** | VIX, VIX3M, VVIX, HY OAS, 10y–3m and 10y–2y spreads, NFCI, broad USD index, initial jobless claims |
 | **D. Event calendar** | FOMC; SNB, ECB, BoJ, RBA and MAS policy decisions; US CPI, payrolls, GDP release dates |
 | **E. Positioning & CB balance sheets** | CFTC Commitments of Traders (currency futures: non-commercial long/short/net, open interest), SNB sight deposits (total, domestic banks) |
-| **F. Long-run backdrop** | CPI (headline/core) — CAPE dropped in step 0 |
+| **F. Long-run backdrop** | US CPI (headline SA and NSA, core SA), unemployment rate, nonfarm payrolls — CAPE dropped in step 0 |
 | **G. Trade** | US exports, imports and balance plus services by category (BEA monthly release workbook; FRED kept as a cross-check only); goods by partner incl. South Korea (Census API, monthly); goods and services by partner (BEA ITA API, quarterly; EU from BEA's geo workbook) — inputs for GDP, FX and sector views |
 
 Consumers (analysis, dashboards, reports) live **outside** this repo. Almanac
@@ -112,6 +112,10 @@ Manifest: `contract_version`, `kind`, `run_id`, `started_at`, `finished_at`,
 `files` (name, sha256, rows), per-source status (`ok` / `empty` / `outage` /
 `error` + reason), and the freshness summary. Revisions are delivered as new
 rows with `revision` > 0 — never by rewriting old bundles.
+
+Backfilled history is the source's latest vintage (e.g. FRED's current
+values), not what was known at the time; only values delivered after a series
+went live are truly point-in-time (later changes arrive as revisions).
 
 `status.json` reports each run: `bundle` and `rows_delivered` (of which
 `revisions_delivered` have `revision` > 0), per-source status, and the freshness
