@@ -85,9 +85,39 @@ def test_since_backfills_new_series_and_looks_back_otherwise():
     reg = mini_registry()
     today = date(2026, 9, 28)
     st = state_mod.State(series={"A1": {"last_obs": "2026-09-25"}, "A2": {"last_obs": "2026-09-26"}})
-    since = deliver.since_by_source(reg.select("B"), st, today, lookback=30, backfill=365)
-    assert since["a"] == date(2026, 8, 26)  # oldest last_obs minus 30 days
+    since = deliver.since_by_source(reg.select("B"), st, today, backfill=365)
+    assert since["a"] == date(2026, 8, 26)  # daily: oldest last_obs minus 30 days
     assert since["b"] == date(2025, 9, 28)  # never delivered: backfill
+
+
+def test_lookback_depends_on_frequency():
+    assert [deliver.lookback_days({"freq": f}) for f in ("daily", "weekly", "monthly", "quarterly")] \
+        == [30, 90, 400, 800]
+    assert deliver.lookback_days({"freq": "mixed (daily/weekly per key)"}) == 30
+    assert deliver.lookback_days({"freq": "monthly", "lookback_days": 1200}) == 1200
+
+
+def test_monthly_series_looks_back_further_and_override_wins():
+    reg = mini_registry()
+    today = date(2026, 9, 28)
+    st = state_mod.State(series={"B1_x": {"last_obs": "2026-08-01"}, "B1_y": {"last_obs": "2026-08-01"}})
+    since = deliver.since_by_source([s for s in reg.select("B") if s["id"] == "B1"], st, today)
+    assert since["b"] == date(2025, 6, 27)  # 2026-08-01 minus 400 days
+    b1 = dict(next(s for s in reg.select("B") if s["id"] == "B1"), lookback_days=10)
+    assert deliver.since_by_source([b1], st, today)["b"] == date(2026, 7, 22)
+
+
+def test_source_takes_the_earliest_start_of_its_series():
+    reg = Registry(sources={"f": {"url": "x"}}, series=[
+        {"id": "D", "source": "f", "key": "d", "freq": "daily", "use": "B", "status": "active"},
+        {"id": "Q", "source": "f", "key": "q", "freq": "quarterly", "use": "B", "status": "active"}])
+    st = state_mod.State(series={"D": {"last_obs": "2026-09-25"}, "Q": {"last_obs": "2026-04-01"}})
+    assert deliver.since_by_source(reg.select("B"), st, date(2026, 9, 28))["f"] == date(2024, 1, 22)
+
+
+def test_every_registry_series_gets_a_known_lookback():
+    for s in REG.series:
+        assert deliver.lookback_days(s) >= 30, s["id"]
 
 
 def test_two_delivery_passes_insert_only(tmp_path):
@@ -116,6 +146,38 @@ def test_two_delivery_passes_insert_only(tmp_path):
     assert status["freshness"]["series"]["A1"]["last_obs"] == "2026-09-28"
     manifest = json.loads((tmp_path / "bundles" / s2["bundle"] / "manifest.json").read_text())
     assert manifest["freshness"]["series"] == len(status["freshness"]["series"])
+
+
+def test_first_run_after_legacy_migration_delivers_nothing_new(tmp_path):
+    """Migrating state/delivered.parquet into per-series files must not change
+    which rows count as already delivered: same upstream data -> 0 rows."""
+    reg = mini_registry()
+    values = {"A1": [("2026-09-24", 1.0), ("2026-09-25", 1.1)], "A2": [("2026-09-25", 2.0)],
+              "B1": [("2026-08-01", 5.0)]}
+
+    def col(reg_, uses, http, since, today):
+        return collect(reg_, uses, http, since, today, {"a": fetcher(values), "b": fetcher(values)})
+
+    s1 = deliver.run(reg, tmp_path, "B", now=NOW, collector=col)
+    assert s1["rows_delivered"] == 4
+
+    # Rebuild the pre-partition layout: one legacy file, no per-series files.
+    import shutil
+
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    st = state_mod.load(tmp_path)
+    legacy = [{"series_id": s, "obs_date": o, "value": v, "revision": r}
+              for (s, o), (v, r) in sorted(st.delivered.items())]
+    shutil.rmtree(tmp_path / "state" / "delivered")
+    pq.write_table(pa.Table.from_pylist(legacy, schema=state_mod.DELIVERED_SCHEMA),
+                   tmp_path / "state" / "delivered.parquet")
+
+    s2 = deliver.run(reg, tmp_path, "B", now=datetime(2026, 9, 29, 2, 30, tzinfo=timezone.utc),
+                     collector=col)
+    assert s2["rows_delivered"] == 0 and s2["bundle"] is None
+    assert not (tmp_path / "state" / "delivered.parquet").exists()  # migrated
+    assert state_mod.load(tmp_path).delivered == st.delivered
 
 
 def test_outage_run_writes_status_but_no_bundle(tmp_path):

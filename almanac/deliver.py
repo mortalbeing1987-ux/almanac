@@ -19,15 +19,24 @@ from .http import Http
 from .registry import Registry, delivered_id, keys
 from .run import collect
 
-LOOKBACK_DAYS = 30  # re-fetch window so revisions to recent values are caught
+# Re-fetch window, by frequency, so revisions to already-delivered values are
+# caught: daily rates settle within weeks, but monthly and quarterly data get
+# revised much further back (payroll benchmarks, annual trade revisions).
+# A series can override with `lookback_days` in the registry.
+LOOKBACK_DAYS = {"daily": 30, "weekly": 90, "monthly": 400, "quarterly": 800}
+DEFAULT_LOOKBACK = 30  # frequencies not listed above (e.g. "mixed")
 BACKFILL_DAYS = 365  # first delivery of a series goes this far back
 
 
+def lookback_days(series: dict) -> int:
+    return int(series.get("lookback_days", LOOKBACK_DAYS.get(series["freq"], DEFAULT_LOOKBACK)))
+
+
 def since_by_source(selected: list[dict], st: state_mod.State, today: date,
-                    lookback: int = LOOKBACK_DAYS, backfill: int = BACKFILL_DAYS) -> dict[str, date]:
-    """Earliest date to fetch per source: the oldest 'last delivered' among its
-    series minus the look-back; a series never delivered pulls the source back
-    to the backfill horizon."""
+                    backfill: int = BACKFILL_DAYS) -> dict[str, date]:
+    """Earliest date to fetch per source: for each series, its oldest 'last
+    delivered' minus its own look-back; a series never delivered pulls the
+    source back to the backfill horizon. A source takes the earliest of its series."""
     out: dict[str, date] = {}
     for s in selected:
         lasts = [st.last_obs(delivered_id(s, k)) for k in keys(s)]
@@ -37,7 +46,7 @@ def since_by_source(selected: list[dict], st: state_mod.State, today: date,
         if any(v is None for v in lasts):
             start = today - timedelta(days=backfill)
         else:
-            start = date.fromisoformat(min(lasts)) - timedelta(days=lookback)
+            start = date.fromisoformat(min(lasts)) - timedelta(days=lookback_days(s))
         out[s["source"]] = min(out.get(s["source"], start), start)
     return out
 
