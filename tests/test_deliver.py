@@ -238,3 +238,33 @@ def test_without_D_no_calendar_is_collected(tmp_path):
     s = deliver.run(reg, tmp_path, "B", now=NOW, collector=col,
                     cal_collector=lambda *a: (_ for _ in ()).throw(AssertionError("called")))
     assert s["calendar_sources"] == {} and s["freshness"]["calendar_ahead"] is None
+
+
+def test_status_json_lists_ids_in_window_only_for_ok_sources(tmp_path):
+    from almanac import calendar as cal
+    reg = Registry(
+        sources={"up": {"url": "u"}, "down": {"url": "d"}},
+        series=[{"id": s.upper(), "source": s, "key": "page", "freq": "event", "use": "D",
+                 "status": "active", "kind": "cb_decision", "country": "XX", "name": s}
+                for s in ("up", "down")])
+    dates = [date(2026, 10, 21), date(2026, 11, 4)]
+
+    def calc(reg_, http, today):
+        return cal.collect(reg_, http, today, {
+            "up": lambda ctx: list(dates),
+            "down": lambda ctx: (_ for _ in ()).throw(FetchError("outage", "HTTP 503"))})
+
+    s1 = deliver.run(reg, tmp_path, "D", now=NOW, cal_collector=calc)
+    up, down = s1["calendar_sources"]["up"], s1["calendar_sources"]["down"]
+    assert up["event_ids_in_window"] == ["up:cb_decision:2026-10-21", "up:cb_decision:2026-11-04"]
+    assert (up["window_from"], up["window_to"]) == ("2026-08-29", "2026-11-27")
+    assert down["status"] == "outage"
+    assert "event_ids_in_window" not in down and "window_from" not in down
+
+    dates.remove(date(2026, 10, 21))  # cancelled
+    s2 = deliver.run(reg, tmp_path, "D", now=datetime(2026, 9, 29, 2, 30, tzinfo=timezone.utc),
+                     cal_collector=calc)
+    assert s2["calendar_sources"]["up"]["event_ids_in_window"] == ["up:cb_decision:2026-11-04"]
+    assert s2["events_delivered"] == 0  # nothing new; the withdrawal is visible only via the list
+    on_disk = json.loads((tmp_path / "status.json").read_text())
+    assert "event_ids_in_window" not in on_disk["calendar_sources"]["down"]

@@ -100,10 +100,16 @@ def run(reg: Registry, data_dir: Path, uses: str, http: Http | None = None,
                                "observations": len(r.observations),
                                "since": since.get(r.source, today).isoformat()}
                     for r in results},
-        "calendar_sources": {r.source: {"status": r.status, "reason": r.reason,
-                                        "events": len(r.events), "furthest_event": r.furthest}
-                             for r in cal_results},
+        "calendar_sources": {r.source: _cal_source_status(r) for r in cal_results},
         "freshness": fresh,
     }
     (data_dir / "status.json").write_text(json.dumps(status, indent=2, sort_keys=True) + "\n")
     return status
+
+
+def _cal_source_status(r: calendar.CalResult) -> dict:
+    out = {"status": r.status, "reason": r.reason, "events": len(r.events), "furthest_event": r.furthest}
+    if r.status == "ok":  # only a successful fetch may say which events are (no longer) listed
+        out.update(event_ids_in_window=r.ids_in_window, window_from=r.window_from,
+                   window_to=r.window_to)
+    return out

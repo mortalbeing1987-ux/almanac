@@ -92,6 +92,18 @@ covered.
 `freshness.calendar_ahead`: per calendar source, the furthest event found and
 `ok = false` when it is less than 60 days out (listed under `short`).
 
+Withdrawn events: when a source's status is `ok`, its
+`calendar_sources.<source>` entry also has `event_ids_in_window` (sorted ids the
+source lists right now) and `window_from` / `window_to` (the date range that
+list speaks for, inclusive). A previously delivered id of that source whose
+date is inside `window_from..window_to` but which is not in the list has been
+withdrawn (moved or cancelled); a moved event's new date arrives as a new row.
+The range is 30 days back to 60 ahead, except for pages that list only upcoming
+events (ECB, SNB), whose range starts today so that a past meeting the page no
+longer shows is not mistaken for a cancellation. On `outage`, `error` or
+`empty` these three fields are absent: a failed fetch says nothing about
+cancellations.
+
 Manifest: `contract_version`, `kind`, `run_id`, `started_at`, `finished_at`,
 `files` (name, sha256, rows), per-source status (`ok` / `empty` / `outage` /
 `error` + reason), and the freshness summary. Revisions are delivered as new

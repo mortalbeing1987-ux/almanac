@@ -163,3 +163,58 @@ def test_nothing_in_window_is_ok_but_no_dates_at_all_is_empty():
     by = {r.source: r for r in res}
     assert by["a"].status == "ok" and by["a"].events == [] and "no events between" in by["a"].reason
     assert by["b"].status == "empty" and by["b"].reason == "no event dates found on the page"
+
+
+# ---- withdrawn events: event_ids_in_window ----------------------------------
+
+def withdrawn(before, after):
+    """Consumer rule: a delivered id inside the new window but no longer listed."""
+    return sorted(i for i in before.ids_in_window
+                  if after.window_from <= i.rsplit(":", 1)[1] <= after.window_to
+                  and i not in after.ids_in_window)
+
+
+def test_moved_date_withdraws_the_old_id():
+    before = cal.collect(mini("a"), None, TODAY, {"a": lambda ctx: [date(2026, 10, 21), date(2026, 11, 4)]})[0]
+    after = cal.collect(mini("a"), None, TODAY, {"a": lambda ctx: [date(2026, 10, 22), date(2026, 11, 4)]})[0]
+    assert after.ids_in_window == ["a:cb_decision:2026-10-22", "a:cb_decision:2026-11-04"]
+    assert withdrawn(before, after) == ["a:cb_decision:2026-10-21"]
+    assert [r["event_id"] for r in cal.new_rows([after], set(before.ids_in_window))] == ["a:cb_decision:2026-10-22"]
+
+
+def test_cancelled_event_is_withdrawn_without_a_replacement():
+    before = cal.collect(mini("a"), None, TODAY, {"a": lambda ctx: [date(2026, 10, 21), date(2026, 11, 4)]})[0]
+    after = cal.collect(mini("a"), None, TODAY, {"a": lambda ctx: [date(2026, 11, 4)]})[0]
+    assert withdrawn(before, after) == ["a:cb_decision:2026-10-21"]
+    assert cal.new_rows([after], set(before.ids_in_window)) == []
+
+
+def test_outage_error_and_empty_never_produce_a_list():
+    table = {"a": lambda ctx: (_ for _ in ()).throw(FetchError("outage", "HTTP 503")),
+             "b": lambda ctx: (_ for _ in ()).throw(FetchError("error", "layout")),
+             "c": lambda ctx: []}
+    for r in cal.collect(mini("a", "b", "c"), None, TODAY, table):
+        assert r.status != "ok"
+        assert r.ids_in_window is None and r.window_from is None and r.window_to is None
+
+
+def test_ok_with_nothing_in_window_is_an_empty_list_not_missing():
+    r = cal.collect(mini("a"), None, TODAY, {"a": lambda ctx: [date(2027, 3, 1)]})[0]
+    assert r.status == "ok" and r.ids_in_window == []
+    assert (r.window_from, r.window_to) == ("2026-08-29", "2026-11-27")
+
+
+def test_upcoming_only_pages_cover_from_today():
+    reg = mini("a")
+    reg.series[0]["page_lists"] = "upcoming"
+    r = cal.collect(reg, None, TODAY, {"a": lambda ctx: [date(2026, 10, 21)]})[0]
+    assert (r.window_from, r.window_to) == ("2026-09-28", "2026-11-27")
+    # a past meeting (Sept 10) that the page has dropped is outside this window,
+    # so a consumer does not mistake it for a cancellation
+    past = "a:cb_decision:2026-09-10"
+    assert not (r.window_from <= past.rsplit(":", 1)[1] <= r.window_to)
+
+
+def test_ecb_and_snb_are_marked_upcoming_only():
+    marked = {s["source"] for s in REG.select("D") if s.get("page_lists") == "upcoming"}
+    assert marked == {"ecb_cal", "snb_cal"}

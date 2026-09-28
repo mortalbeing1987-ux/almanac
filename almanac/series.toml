@@ -282,6 +282,8 @@ redistribution = "open"
 # `country` (ISO-2 or EA) and `name` fill the cal- bundle rows; `time_local` +
 # `tz` are the institution's published standard announcement time (omitted
 # where none is published), converted to UTC per event date.
+# `page_lists = "upcoming"` marks pages that drop events once they have
+# happened; their status.json window (for withdrawn-event detection) starts today.
 [[series]]
 id = "FOMC"
 source = "fed_fomc"
@@ -309,6 +311,7 @@ redistribution = "open"
 kind = "cb_decision"
 country = "EA"
 name = "ECB monetary policy decision"
+page_lists = "upcoming"  # the calendar starts at the next meeting
 time_local = "14:15"
 tz = "Europe/Berlin"
 
@@ -352,6 +355,7 @@ redistribution = "open"
 kind = "cb_decision"
 country = "CH"
 name = "SNB monetary policy assessment"
+page_lists = "upcoming"  # the event schedule drops past events
 time_local = "09:30"
 tz = "Europe/Zurich"
 

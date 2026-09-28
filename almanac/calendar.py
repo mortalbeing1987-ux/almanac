@@ -69,6 +69,13 @@ class CalResult:
     fetched_at: str = ""
     events: list[Event] = field(default_factory=list)
     furthest: str | None = None  # furthest event date on the page (any horizon)
+    # Set only when status is "ok": the date range this page speaks for, and
+    # the ids it currently lists inside it. A delivered id inside the range but
+    # missing from the list has been withdrawn (moved or cancelled). Never set
+    # on outage/error/empty, so a failed fetch cannot look like cancellations.
+    window_from: str | None = None
+    window_to: str | None = None
+    ids_in_window: list[str] | None = None
 
 
 def fetchers() -> dict[str, CalFetcher]:
@@ -116,7 +123,14 @@ def collect(reg: Registry, http: Http, today: date,
         status = "ok" if days else "empty"
         reason = "" if events else (f"no events between {lo} and {hi}" if days
                                     else "no event dates found on the page")
-        results.append(CalResult(src, status, reason, _now(), events, furthest))
+        res = CalResult(src, status, reason, _now(), events, furthest)
+        if status == "ok":
+            # Pages that list only upcoming events say nothing about the past
+            # part of the window, so their range starts today.
+            cover_from = today if s.get("page_lists") == "upcoming" else lo
+            res.window_from, res.window_to = cover_from.isoformat(), hi.isoformat()
+            res.ids_in_window = sorted(e.event_id for e in events if e.event_date >= res.window_from)
+        results.append(res)
     return results
 
 
