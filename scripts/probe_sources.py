@@ -86,11 +86,18 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     out.append(("census:partners", cen + "2026-06"))
     out.append(("census:span", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,ALL_VAL_MO&CTY_CODE=5800&time=from+2000-01"))
     # quarterly freshness: when did each quarter first appear in the geo workbook?
-    for m, name in ((1, "january"), (2, "february"), (3, "march"), (4, "april"), (5, "may"), (6, "june"), (7, "july")):
-        out.append((f"beahist:{m:02d}", f"https://www.bea.gov/news/2026/us-international-trade-goods-and-services-{name}-2026"))
-    # euro-area composition: EA vs the sum of its members (booleans only)
+    months = ["january", "february", "march", "april", "may", "june", "july", "august", "september",
+              "october", "november", "december"]
+    for yr, last in ((2025, 12), (2026, 7)):
+        for m in range(1, last + 1):
+            # the page for data month m is published in the year the release happens
+            pub = yr if m < 11 or yr == 2026 else yr + 1
+            for py in sorted({yr, pub}):
+                out.append((f"beahist:{yr}-{m:02d}@{py}",
+                            f"https://www.bea.gov/news/{py}/us-international-trade-goods-and-services-{months[m - 1]}-{yr}"))
+    # euro-area composition: EA vs the sum of its members, picked by name (booleans only)
     out.append(("census:eacheck", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
-                "&time=from+2022-11&" + "&".join(f"CTY_CODE={c}" for c in EA_CODES)))
+                "&time=from+2022-11"))
     cen2 = ("https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
             "&time=from+2026-04&CTY_CODE=-&CTY_CODE=0025&CTY_CODE=6021")
     out.append(("census:multi", cen2))
@@ -444,31 +451,32 @@ CENSUS_PARTNERS = (r"TOTAL FOR ALL|EUROPEAN UNION|EURO AREA|CANADA|MEXICO|^CHINA
                    r"KOREA|TAIWAN|SWITZERLAND|SINGAPORE|AUSTRALIA|GERMANY|INDIA|VIETNAM")
 
 
-# Census country codes of the euro-area members (names are checked in the reply)
-EA_CODES = ["0025", "4330", "4231", "4870", "4793", "4910", "4470", "4050", "4279", "4280", "4840",
-            "4190", "4759", "4490", "4510", "4239", "4730", "4210", "4710", "4359", "4792", "4700"]
+EA_NOW = {"AUSTRIA", "BELGIUM", "BULGARIA", "CROATIA", "CYPRUS", "ESTONIA", "FINLAND", "FRANCE", "GERMANY",
+          "GREECE", "IRELAND", "ITALY", "LATVIA", "LITHUANIA", "LUXEMBOURG", "MALTA", "NETHERLANDS",
+          "PORTUGAL", "SLOVAKIA", "SLOVENIA", "SPAIN"}
 
 
 def ea_check(body: bytes) -> str:
-    """Per month: does EA equal the sum of today's members, or of the members at
-    the time (Croatia from 2023-01, Bulgaria from 2026-01)? Booleans only."""
+    """Per month: does EURO AREA equal the sum of today's members, or of the
+    members at the time (Croatia from 2023-01, Bulgaria from 2026-01)? Booleans only."""
     rows = json.loads(body)
     head = rows[0]
     ci, ni, vi, ti = head.index("CTY_CODE"), head.index("CTY_NAME"), head.index("ALL_VAL_MO"), head.index("time")
-    names = sorted({r[ni] for r in rows[1:]})
-    by = {}
+    by: dict[str, dict[str, float]] = {}
+    ea_code = next((r[ci] for r in rows[1:] if r[ni] == "EURO AREA"), None)
     for r in rows[1:]:
-        by.setdefault(r[ti], {})[r[ci]] = float(r[vi] or 0)
-    out = [f"names {names}"]
+        if r[ni] in EA_NOW or r[ci] == ea_code:
+            by.setdefault(r[ti], {})[r[ni] if r[ci] != ea_code else "EA"] = float(r[vi] or 0)
+    found = sorted({n for v in by.values() for n in v} - {"EA"})
+    out = [f"EA code {ea_code}; members found {len(found)}/21: missing {sorted(EA_NOW - set(found))}"]
+    close = lambda a, b: abs(a - b) <= max(2.0, abs(b) * 1e-6)
     for t in sorted(by):
         v = by[t]
-        if "0025" not in v:
+        if "EA" not in v:
             continue
-        members = {c: x for c, x in v.items() if c != "0025"}
-        today = sum(members.values())
-        at_time = today - (0 if t >= "2023-01" else members.get("4793", 0)) - (0 if t >= "2026-01" else members.get("4870", 0))
-        close = lambda a, b: abs(a - b) <= max(1.0, abs(b) * 1e-6)
-        out.append(f"{t}: EA=sum(today's members) {close(v['0025'], today)}, EA=sum(members at the time) {close(v['0025'], at_time)}")
+        today = sum(x for n, x in v.items() if n != "EA")
+        at_time = today - (0 if t >= "2023-01" else v.get("CROATIA", 0)) - (0 if t >= "2026-01" else v.get("BULGARIA", 0))
+        out.append(f"{t}: today's {close(v['EA'], today)}, at-the-time {close(v['EA'], at_time)}")
     return "; ".join(out)
 
 
@@ -704,6 +712,10 @@ def main() -> int:
         if label == "census:partners" and body:
             details.append(f"- census partners: {census_rows(body, CENSUS_PARTNERS)}")
         if label.startswith("beahist:") and body:
+            pub = re.search(rb'<time[^>]*datetime="(\d{4}-\d{2}-\d{2})', body)
+            if not pub:
+                pub = re.search(rb"((?:January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, 20\d\d)", body)
+            details.append(f"- {label}: published {pub.group(1).decode() if pub else '?'}")
             m = re.search(rb'href="([^"]*trad\d{4}[^"]*geo-time-series[^"]*\.xlsx)"', body)
             if not m:
                 details.append(f"- {label}: geo workbook link not found")
