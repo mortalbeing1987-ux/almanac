@@ -39,6 +39,8 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
         url = src["url"]
         if "{area}" in url:
             continue  # probed per (key, area) below
+        if "{flow}" in url:
+            url = "TBD"  # template needs a month; probed via its candidates
         if url == "TBD":
             cands = src.get("candidates", [])
             out.extend((f"{name}?{i}", c) for i, c in enumerate(cands, 1))

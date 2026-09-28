@@ -14,7 +14,7 @@ brokerage API doesn't provide (or provides poorly):
 | **D. Event calendar** | FOMC; SNB, ECB, BoJ, RBA and MAS policy decisions; US CPI, payrolls, GDP release dates |
 | **E. Positioning & CB balance sheets** | CFTC Commitments of Traders (currency futures), SNB sight deposits |
 | **F. Long-run backdrop** | CPI (headline/core) — CAPE dropped in step 0 |
-| **G. Trade** | US exports, imports and balance (goods & services), bilateral goods trade with major partners — inputs for GDP, FX and sector views |
+| **G. Trade** | US exports, imports and balance (monthly, FRED/BEA-Census release); goods by partner incl. South Korea (Census API, monthly); goods and services by partner (BEA ITA, quarterly) — inputs for GDP, FX and sector views |
 
 Consumers (analysis, dashboards, reports) live **outside** this repo. Almanac
 only collects, validates and delivers.
