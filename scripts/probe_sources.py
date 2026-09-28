@@ -75,6 +75,13 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     # full-history FRED files for the weekly / lagged series (cosd from 1900)
     for k in ("NFCI", "ICSA", "DTWEXBGS", "T10Y3M"):
         out.append((f"fredfull:{k}", reg["sources"]["fred"]["url"].format(key=k, **dict(fmt, since="1900-01-01"))))
+    # use case F: FRED release calendars (release DATES only) to measure how old
+    # the latest monthly value gets before the next release; full-history spans
+    for rid in ("10", "50"):  # CPI, Employment Situation
+        for y in range(2019, year + 1):
+            out.append((f"fredcal:{rid}:{y}", f"https://fred.stlouisfed.org/releases/calendar?rid={rid}&y={y}"))
+    for k in ("CPIAUCSL", "CPIAUCNS", "CPILFESL", "UNRATE", "PAYEMS"):
+        out.append((f"fredfull:{k}", reg["sources"]["fred"]["url"].format(key=k, **dict(fmt, since="1900-01-01"))))
     # use case E: CFTC legacy futures-only history (page + yearly zips), SNB
     # sight-deposit cube dimensions
     out.append(("cftc:history", "https://www.cftc.gov/MarketReports/CommitmentsofTraders/HistoricalCompressed/index.htm"))
@@ -182,7 +189,8 @@ def list_values(body: bytes, field: str, pattern: str) -> str:
 SHAPE = {"cftc", "snb:snbgwdchfsgw"}
 # Latest and earliest observation DATES only (first CSV column), to measure
 # publication lag and history depth. Dates are not values.
-DATE_SPAN: set[str] = set()
+DATE_SPAN = {"fredfull:CPIAUCSL", "fredfull:CPIAUCNS", "fredfull:CPILFESL", "fredfull:UNRATE",
+             "fredfull:PAYEMS"}
 
 
 # CFTC legacy COT rows are "name",YYMMDD,YYYY-MM-DD,code,... (deafut.txt has
@@ -271,6 +279,25 @@ def snb_codes(body: bytes) -> str:
             days[f[1]][wd] += 1
     return (f"header {cols}\n    non-empty by weekday: {days}\n    " + "\n    ".join(
         f"{k}: {len(v)} rows, {min(v)}..{max(v)}" for k, v in sorted(combos.items())))
+
+
+def release_ages(dates: list) -> str:
+    """For a monthly release: the latest value covers the month before the
+    release month (obs_date = its 1st). Age just before the next release =
+    next release date - that 1st. Months whose value came late (e.g. a
+    shutdown) show up as outliers and are listed."""
+    from datetime import date as d_
+    ds = sorted(set(dates))
+    ages = []
+    for a, b in zip(ds, ds[1:]):
+        m = a.month - 1 or 12
+        y = a.year if a.month > 1 else a.year - 1
+        ages.append(((b - d_(y, m, 1)).days, a, b))
+    ages.sort(reverse=True)
+    top = ", ".join(f"{n}d ({a}->{b})" for n, a, b in ages[:8])
+    normal = sorted(n for n, _, _ in ages)
+    return (f"{len(ds)} release dates {ds[0]}..{ds[-1]}; max ages: {top}; "
+            f"median {normal[len(normal) // 2]}d, 95th pct {normal[int(len(normal) * 0.95)]}d")
 
 
 def date_span(body: bytes) -> str:
@@ -384,6 +411,7 @@ def main() -> int:
              "|---|---|---|---|---|---|---|"]
     details: list[str] = []
     only = [p for p in os.environ.get("PROBE_ONLY", "").split(",") if p]
+    release_dates: dict[str, list] = {}
     for label, url in probe_urls(reg):
         if only and not any(label.startswith(p) for p in only):
             continue
@@ -391,7 +419,7 @@ def main() -> int:
             lines.append(f"| {label} | TBD (no url yet) | | | | | |")
             continue
         src = reg["sources"].get(label.split("?")[0].split(":")[0].replace("fredfull", "fred")
-                                 .replace("cftczip", "cftc"), {})
+                                 .replace("cftczip", "cftc").replace("fredcal", "fred"), {})
         creds = auth(src)
         if creds is None:
             lines.append(f"| {label} | needs secret {src['secret']} (not set; not requested) | | | | | |")
@@ -426,6 +454,14 @@ def main() -> int:
                                + (f", MISSING: {missing}" if missing else ""))
         if label in CENSUS_ROWS and cells[3] == "json":
             details.append(f"- {label}: {census_rows(body, CENSUS_ROWS[label])}")
+        if label.startswith("fredcal:") and body:
+            sys.path.insert(0, str(REGISTRY.parents[1]))
+            from almanac.sources import cal_fred
+            rid = label.split(":")[1]
+            try:
+                release_dates.setdefault(rid, []).extend(cal_fred.parse(body, rid))
+            except Exception as e:  # layout change: say so, keep probing
+                details.append(f"- {label}: {type(e).__name__}")
         if label == "cftc" and body:
             details.append(f"- cftc (deafut.txt) currency rows: {cot_rows(body.decode('latin-1'))}")
         if label.startswith("cftczip:") and body:
@@ -441,6 +477,8 @@ def main() -> int:
         if label in LISTS:
             details.append(f"- {label}: {list_values(body, *LISTS[label])}")
         time.sleep(1)  # one request at a time, politely
+    for rid, ds in sorted(release_dates.items()):
+        details.append(f"- release {rid} ages: {release_ages(ds)}")
     table = "\n".join(lines)
     if details:
         table += "\n\nMetadata (names only):\n" + "\n".join(details)

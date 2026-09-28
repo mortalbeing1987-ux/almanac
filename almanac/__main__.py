@@ -1,5 +1,5 @@
 """python -m almanac collect --uses AB --since 2026-09-01 --out out/
-python -m almanac deliver --data-dir <checked-out private data repo> --uses ABCDE
+python -m almanac deliver --data-dir <checked-out private data repo> --uses ABCDEF
 
 `collect` fetches and writes one bundle to --out; `deliver` runs a scheduled
 pass with delivery state (see deliver.py). Both print per-source status and
@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--out", type=Path, default=Path("out"))
     d = sub.add_parser("deliver", help="scheduled pass into a checked-out private data repo")
     d.add_argument("--data-dir", type=Path, required=True)
-    d.add_argument("--uses", default="ABCDE", help="use-case tags, e.g. ABCDE (D = event calendar)")
+    d.add_argument("--uses", default="ABCDEF", help="use-case tags, e.g. ABCDEF (D = event calendar)")
     args = ap.parse_args(argv)
 
     if args.cmd == "deliver":
@@ -64,12 +64,17 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _rows_by_series(parquet: Path) -> dict[str, int]:
-    """Row counts per registry series id (counts only, never values)."""
+def _rows_by_series(parquet: Path, max_ids: int = 40) -> dict[str, int]:
+    """Row counts per delivered id when a bundle has few ids, otherwise per
+    registry series id (counts only, never values)."""
     import pyarrow.parquet as pq
-    ids = sorted((s["id"] for s in load().series), key=len, reverse=True)
+    delivered = pq.read_table(parquet, columns=["series_id"]).column("series_id").to_pylist()
+    if len(set(delivered)) <= max_ids:
+        ids: list[str] = []
+    else:
+        ids = sorted((s["id"] for s in load().series), key=len, reverse=True)
     out: dict[str, int] = {}
-    for sid in pq.read_table(parquet, columns=["series_id"]).column("series_id").to_pylist():
+    for sid in delivered:
         reg_id = next((i for i in ids if sid == i or sid.startswith(i + "_")), sid)
         out[reg_id] = out.get(reg_id, 0) + 1
     return out
