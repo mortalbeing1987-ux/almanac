@@ -172,21 +172,22 @@ SHAPE = {"fred", "treasury", "nyfed", "ecb", "snb", "boj", "rba", "mas"}
 # markup a parser needs. Event dates are public schedule facts, not data
 # values, so they are shown unmasked. (label -> keyword regex)
 SNIPPETS = {
-    "cal_research?1": r"fomc-meeting__date|fomc-meeting__month",
-    "cal_research?2": r"(?i)monetary policy assessment",
-    "cal_research?3": r"(?i)monetary policy meeting",
-    "cal_research?4": r"(?i)<table|Monetary Policy Meeting",
-    "cal_research?5": r"(?i)<table|Monetary Policy Board",
-    "cal_research?6": r"(?i)Monetary Policy Statement",
+    "cal_research?1": r"FOMC Meetings</|fomc-meeting__month[^>]*><strong>[A-Z][a-z]+/",
+    "cal_research?2": r"(?i)monetary policy assessment|\.ics|ical|api/",
+    "cal_research?3": r"(?i)monetary policy assessment|\.ics|ical",
+    "cal_research?4": r"<tbody>|<tr> <td>|<tr>\s*<td>",
+    "cal_research?5": r"<caption|Monetary Policy Board</th>|<th scope=\"row\">",
+    "cal_research?6": r"(?i)next monetary policy|scheduled|2027|/api/|\.json",
     "cal_research?7": r"Consumer Price Index|Employment Situation",
-    "cal_research?8": r".",
-    "cal_research?9": r".",
-    "cal_research?10": r".",
-    "cal_research?11": r"(?i)GDP|Gross Domestic Product",
+    "cal_research?8": r"(?i)release date|2026",
+    "cal_research?9": r"(?i)<form|<select|<input|name=\"[a-z_]+\"|download",
+    "cal_research?10": r"(?i)release-calendar|calendar-date|<td|2026-1",
+    "cal_research?11": r"(?i)<caption|<h2|scheduled-date|release-date|Year",
+    "cal_research?12": r"(?i)monetary policy statement|/api/",
 }
 
 
-def snippets(body: bytes, pattern: str, n: int = 6, width: int = 380) -> str:
+def snippets(body: bytes, pattern: str, n: int = 8, width: int = 420) -> str:
     text = body.decode("utf-8", "replace")
     out = []
     for m in re.finditer(pattern, text):

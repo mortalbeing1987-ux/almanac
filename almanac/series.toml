@@ -50,16 +50,17 @@ url = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
 url = "TBD"
 candidates = [
   "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
-  "https://www.snb.ch/en/the-snb/mandates-goals/monetary-policy/decisions",
-  "https://www.ecb.europa.eu/press/calendars/mgcgc/html/index.en.html",
+  "https://www.snb.ch/en/services-events/events",
+  "https://www.snb.ch/en/services-events/digital-services/event-schedule",
   "https://www.boj.or.jp/en/mopo/mpmsche_minu/index.htm",
   "https://www.rba.gov.au/schedules-events/board-meeting-schedules.html",
-  "https://www.mas.gov.sg/monetary-policy/advance-release-calendar",
+  "https://www.mas.gov.sg/monetary-policy/mas-monetary-policy-statements",
   "https://www.bls.gov/schedule/news_release/bls.ics",
+  "https://www.bls.gov/schedule/news_release/cpi.htm",
   "https://alfred.stlouisfed.org/release/downloaddates?rid=10",
-  "https://alfred.stlouisfed.org/release/downloaddates?rid=50",
-  "https://alfred.stlouisfed.org/release/downloaddates?rid=53",
+  "https://fred.stlouisfed.org/releases/calendar?rid=10&y=2026",
   "https://www.bea.gov/news/schedule",
+  "https://www.mas.gov.sg/monetary-policy",
 ]
 
 [sources.boj]
