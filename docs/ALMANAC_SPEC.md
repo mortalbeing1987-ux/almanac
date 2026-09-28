@@ -12,7 +12,7 @@ brokerage API doesn't provide (or provides poorly):
 | **B. Funding & carry inputs** | Overnight rates: SOFR, EFFR (USD), €STR (EUR), SARON (CHF), TONA (JPY), RBA cash rate (AUD), SORA (SGD) |
 | **C. Regime** | VIX, VIX3M, VVIX, HY OAS, 10y–3m and 10y–2y spreads, NFCI, broad USD index, initial jobless claims |
 | **D. Event calendar** | FOMC; SNB, ECB, BoJ, RBA and MAS policy decisions; US CPI, payrolls, GDP release dates |
-| **E. Positioning & CB balance sheets** | CFTC Commitments of Traders (currency futures), SNB sight deposits |
+| **E. Positioning & CB balance sheets** | CFTC Commitments of Traders (currency futures: non-commercial long/short/net, open interest), SNB sight deposits (total, domestic banks) |
 | **F. Long-run backdrop** | CPI (headline/core) — CAPE dropped in step 0 |
 | **G. Trade** | US exports, imports and balance plus services by category (BEA monthly release workbook; FRED kept as a cross-check only); goods by partner incl. South Korea (Census API, monthly); goods and services by partner (BEA ITA API, quarterly; EU from BEA's geo workbook) — inputs for GDP, FX and sector views |
 
@@ -134,6 +134,18 @@ Time-Series Data Search API (keyless CSV), RBA cash rate from statistical
 table F1 (keyless CSV), SARON from SNB cube `snbgwdzid`, SORA from the MAS API
 gateway with the owner's free key (secret `MAS_API_KEY`). CAPE dropped.
 
+Use case E (probe 2026-09-28): CFTC legacy futures-only COT, contracts
+identified by CFTC contract market code (CHF 092741, JPY 097741, EUR 099741,
+AUD 232741, GBP 096742, CAD 090741; names changed over time, codes did not).
+`deafut.txt` holds the latest report only; history comes from CFTC's yearly
+archives `files/dea/history/deacot<year>.zip` (1986 onwards, one `annual.txt`
+each, the current year updated weekly). Delivered as
+`COT_FX_<ccy>_{NC_LONG,NC_SHORT,NC_NET,OI}`, `obs_date` = the as-of Tuesday.
+SNB sight deposits from cube `snbgwdchfsgw`, D0 codes `TG` (total) and `GI`
+(domestic banks), weekly, dated the Friday, published the following Monday.
+Both run in the daily delivery (a routine pass re-reads only the current
+year's COT zip, ~2 MB, and the SNB cube, ~0.4 MB).
+
 ## Build steps (stop for owner review after each)
 
 0. **Scaffold + source probe (done by the initial commit).** Run the
@@ -143,7 +155,7 @@ gateway with the owner's free key (secret `MAS_API_KEY`). CAPE dropped.
 1. **Fetchers + bundle writer**, with offline tests. Start with use cases A
    and B.
 2. **Schedule + freshness + canary + delivery.** Daily cron (after US close
-   and again early Asia), weekly for CFTC/SNB. Push to the private data repo
+   and again early Asia); the weekly CFTC/SNB series ride the same runs. Push to the private data repo
    (secret `DATA_REPO_TOKEN`, a fine-grained token with contents:write on
    that one repo only — the owner creates it). Status in `status.json`.
 3. *(Home side, not in this repo)* importer.

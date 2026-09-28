@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from .registry import delivered_id, key_of, key_settings, keys
+from .registry import delivered_ids, key_of, key_settings, keys
 
 # Default max age (days between the latest observation and today) by frequency;
 # a series can override with `max_age_days` in the registry.
@@ -22,7 +22,7 @@ def expected_ids(series: dict) -> list[str]:
         return []
     if "areas" in series or "flows" in series or "file" in series:
         return []  # expanded per area/flow/table by their fetchers (later steps)
-    return [delivered_id(series, k) for k in keys(series)]
+    return [i for k in keys(series) for i in delivered_ids(series, k)]
 
 
 def max_age(series: dict, key: str | None = None) -> int | None:

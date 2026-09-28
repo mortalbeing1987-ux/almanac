@@ -16,12 +16,14 @@
 #                  monthly 400, quarterly 800)
 #   backfill       first-delivery depth: "full" (everything the source has) or a
 #                  number of days (default 365)
+#   measures       several values per key: delivered as `<id>_<key>_<measure>`
 #   per_key        per-key overrides of freq / max_age_days / lookback_days, e.g.
 #                  weekly codes inside an otherwise daily series
 #
 # url templates: {key} registry key, {since} earliest date wanted (YYYY-MM-DD),
 # {n} number of days wanted, {year}/{prev_year} calendar years.
-# Delivered series_id: the registry id, or `<id>_<key>` when `key` is a list.
+# Delivered series_id: the registry id, or `<id>_<key>` when `key` is a list
+# (`<id>_<key>_<measure>` when the series lists `measures`).
 
 [sources.fred]
 url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={key}&cosd={since}"
@@ -43,7 +45,12 @@ url = "https://data.snb.ch/api/cube/{key}/data/csv/en"
 url = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{key}_History.csv"
 
 [sources.cftc]
+# Legacy Commitments of Traders, futures only. deafut.txt = the latest report
+# (no header, 129 columns); history_url = one zip per year from 1986, each
+# holding annual.txt (same 129 columns with a header), the current year's
+# updated weekly. Probe 2026-09-28: 1986..2026 all 200; 2026 zip ~1.9 MB.
 url = "https://www.cftc.gov/dea/newcot/deafut.txt"
+history_url = "https://www.cftc.gov/files/dea/history/deacot{year}.zip"
 
 [sources.fed_fomc]
 url = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
@@ -436,22 +443,44 @@ tz = "America/New_York"
 [[series]]
 id = "COT_FX"
 source = "cftc"
-key = ["SWISS FRANC", "JAPANESE YEN", "EURO FX", "AUSTRALIAN DOLLAR", "BRITISH POUND", "CANADIAN DOLLAR"]
+# Currency futures by CFTC contract market code (names changed over time, e.g.
+# IMM -> CME in 2000, POUND STERLING -> BRITISH POUND; the codes did not).
+# Probe 2026-09-28: every code present in deafut.txt and the yearly zips;
+# history from 1986-01-15 (EUR from 1999-01-05, AUD from 1987-01-30, GBP
+# 096742 from 1988-04-29 -- the earlier GBP contract 096741 is not spliced in).
+key = ["CHF", "JPY", "EUR", "AUD", "GBP", "CAD"]
+contracts = { CHF = "092741", JPY = "097741", EUR = "099741", AUD = "232741", GBP = "096742", CAD = "090741" }
+# Delivered id: COT_FX_<ccy>_<measure>. NC = non-commercial ("large
+# speculators"); NET = long - short; OI = open interest (all).
+measures = ["NC_LONG", "NC_SHORT", "NC_NET", "OI"]
 freq = "weekly"
-units = "contracts (non-commercial long/short, open interest)"
+units = "contracts"
 use = "E"
 status = "active"
 redistribution = "open"
+backfill = "full"
+# obs_date = the report's "as of" Tuesday; released Friday 15:30 ET, so the
+# latest report is 10 days old just before the next one (Fri 02:30 UTC run),
+# 11 when a US holiday moves the release to Monday (Sat 02:30 UTC run).
+max_age_days = 11
 
 [[series]]
 id = "SNB_SIGHT"
 source = "snb"
-key = "snbgwdchfsgw"
+cube = "snbgwdchfsgw"
+# D0 codes (probe 2026-09-28): TG = total sight deposits in CHF at the SNB,
+# GI = sight deposits of domestic banks (UEB = other sight deposits, not
+# collected). Weekly, dated the Friday, from 2009-01-09.
+key = ["TG", "GI"]
 freq = "weekly"
 units = "CHF millions"
 use = "E"
 status = "active"
 redistribution = "open"
+backfill = "full"
+# Published Mondays: before the next release the latest week is 8 days old
+# (Sat 02:30 UTC run) and 10 when a Swiss holiday Monday moves it to Tuesday.
+max_age_days = 10
 
 # ---- F. Long-run backdrop ----------------------------------------------------
 [[series]]

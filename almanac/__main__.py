@@ -1,5 +1,5 @@
 """python -m almanac collect --uses AB --since 2026-09-01 --out out/
-python -m almanac deliver --data-dir <checked-out private data repo> --uses ABCD
+python -m almanac deliver --data-dir <checked-out private data repo> --uses ABCDE
 
 `collect` fetches and writes one bundle to --out; `deliver` runs a scheduled
 pass with delivery state (see deliver.py). Both print per-source status and
@@ -30,7 +30,7 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--out", type=Path, default=Path("out"))
     d = sub.add_parser("deliver", help="scheduled pass into a checked-out private data repo")
     d.add_argument("--data-dir", type=Path, required=True)
-    d.add_argument("--uses", default="ABCD", help="use-case tags, e.g. ABCD (D = event calendar)")
+    d.add_argument("--uses", default="ABCDE", help="use-case tags, e.g. ABCDE (D = event calendar)")
     args = ap.parse_args(argv)
 
     if args.cmd == "deliver":

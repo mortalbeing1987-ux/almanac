@@ -45,6 +45,13 @@ def delivered_id(series: dict, key: str) -> str:
     return f"{series['id']}_{key}" if isinstance(series["key"], list) else series["id"]
 
 
+def delivered_ids(series: dict, key: str) -> list[str]:
+    """Every id one key delivers: `<id>_<key>_<measure>` per measure when the
+    series lists `measures` (e.g. COT long/short/net/open interest), else one."""
+    base = delivered_id(series, key)
+    return [f"{base}_{m}" for m in series["measures"]] if "measures" in series else [base]
+
+
 PER_KEY_FIELDS = ("freq", "max_age_days", "lookback_days")
 
 
@@ -62,7 +69,11 @@ def key_settings(series: dict, key: str | None) -> dict:
 def key_of(series: dict, delivered: str) -> str | None:
     """The registry key behind a delivered id (`<id>_<key>`), or None."""
     if isinstance(series["key"], list) and delivered.startswith(series["id"] + "_"):
-        return delivered[len(series["id"]) + 1:]
+        rest = delivered[len(series["id"]) + 1:]
+        for m in series.get("measures", []):
+            if rest.endswith("_" + m):
+                return rest[:-len(m) - 1]
+        return rest
     return None
 
 

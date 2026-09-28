@@ -17,7 +17,7 @@ from pathlib import Path
 from . import calendar, freshness, state as state_mod
 from .bundle import assign_revisions, run_id_for, write_macro_bundle
 from .http import Http
-from .registry import Registry, delivered_id, key_settings, keys
+from .registry import Registry, delivered_ids, key_settings, keys
 from .run import collect
 
 # Re-fetch window, by frequency, so revisions to already-delivered values are
@@ -50,7 +50,7 @@ def since_by_series(selected: list[dict], st: state_mod.State, today: date,
     series, one series' full backfill never re-pulls another series' history."""
     out: dict[str, date] = {}
     for s in selected:
-        pairs = [(k, st.last_obs(delivered_id(s, k))) for k in keys(s)]
+        pairs = [(k, st.last_obs(i)) for k in keys(s) for i in delivered_ids(s, k)]
         if s["source"] == "treasury":  # tenor ids aren't known up front
             pairs = [(None, m.get("last_obs")) for sid, m in st.series.items()
                      if sid.startswith(s["id"] + "_")] or [(None, None)]
