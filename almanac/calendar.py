@@ -110,8 +110,12 @@ def collect(reg: Registry, http: Http, today: date,
         events = [Event(d.isoformat(), time_utc(s, d), s["country"], s["kind"], s["name"], src)
                   for d in days if lo <= d <= hi]
         furthest = days[-1].isoformat() if days else None
-        status = "ok" if events else "empty"
-        reason = "" if events else f"no events between {lo} and {hi}"
+        # `empty` (retryable) only when the page yielded no dates at all. A page
+        # that parsed but has nothing inside the window is fine -- e.g. a
+        # quarterly meeting that falls just beyond 60 days.
+        status = "ok" if days else "empty"
+        reason = "" if events else (f"no events between {lo} and {hi}" if days
+                                    else "no event dates found on the page")
         results.append(CalResult(src, status, reason, _now(), events, furthest))
     return results
 

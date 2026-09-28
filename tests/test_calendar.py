@@ -155,3 +155,11 @@ def test_all_active_calendars_have_a_parser_and_mas_is_tbd():
     assert {s["source"] for s in REG.select("D")} <= set(cal.fetchers())
     mas = next(s for s in REG.series if s["id"] == "MAS_DECISION")
     assert mas["status"] == "tbd"
+
+
+def test_nothing_in_window_is_ok_but_no_dates_at_all_is_empty():
+    res = cal.collect(mini("a", "b"), None, TODAY,
+                      {"a": lambda ctx: [date(2026, 12, 10)], "b": lambda ctx: []})
+    by = {r.source: r for r in res}
+    assert by["a"].status == "ok" and by["a"].events == [] and "no events between" in by["a"].reason
+    assert by["b"].status == "empty" and by["b"].reason == "no event dates found on the page"
