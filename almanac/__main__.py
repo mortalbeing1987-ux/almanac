@@ -64,12 +64,17 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
-def _rows_by_series(parquet: Path) -> dict[str, int]:
-    """Row counts per registry series id (counts only, never values)."""
+def _rows_by_series(parquet: Path, max_ids: int = 40) -> dict[str, int]:
+    """Row counts per delivered id when a bundle has few ids, otherwise per
+    registry series id (counts only, never values)."""
     import pyarrow.parquet as pq
-    ids = sorted((s["id"] for s in load().series), key=len, reverse=True)
+    delivered = pq.read_table(parquet, columns=["series_id"]).column("series_id").to_pylist()
+    if len(set(delivered)) <= max_ids:
+        ids: list[str] = []
+    else:
+        ids = sorted((s["id"] for s in load().series), key=len, reverse=True)
     out: dict[str, int] = {}
-    for sid in pq.read_table(parquet, columns=["series_id"]).column("series_id").to_pylist():
+    for sid in delivered:
         reg_id = next((i for i in ids if sid == i or sid.startswith(i + "_")), sid)
         out[reg_id] = out.get(reg_id, 0) + 1
     return out
