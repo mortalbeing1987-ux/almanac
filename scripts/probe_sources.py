@@ -37,6 +37,8 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
             first_key.setdefault(s["source"], k)
     for name, src in reg["sources"].items():
         url = src["url"]
+        if "{area}" in url:
+            continue  # probed per (key, area) below
         if url == "TBD":
             cands = src.get("candidates", [])
             out.extend((f"{name}?{i}", c) for i, c in enumerate(cands, 1))
@@ -48,6 +50,14 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
             key = "VIX"
         out.append((name, url.format(key=key, year=year)))
     # candidate keys on sources that already have a url (e.g. SARON on snb)
+    # sources whose series have `areas`: one probe per (key, area)
+    for s in reg.get("series", []):
+        if "areas" in s:
+            url = reg["sources"][s["source"]]["url"]
+            for k in s["key"]:
+                for a in s["areas"]:
+                    out.append((f"{s['source']}:{k}:{a}",
+                                url.format(key=k, area=a, year=year, prev_year=year - 1)))
     for s in reg.get("series", []):
         for c in s.get("candidates", []):
             url = reg["sources"][s["source"]]["url"]
@@ -64,11 +74,6 @@ MARKERS = {
     "boj": "STRDCLUCON",
     "rba": "FIRMMCRTD",
     "mas": "sora",
-    "bea?4": "Korea",
-    "bea?5": "Error",
-    "bea?6": "Error",
-    "bea?7": "Error",
-    "bea?8": "Error",
     "census?1": "5800",
     "census?2": "5800",
 }
@@ -76,14 +81,6 @@ MARKERS = {
 # Catalog/metadata calls: list the distinct values of one JSON field (dataset,
 # frequency, indicator or country NAMES) matching a filter. Never data values.
 LISTS = {
-    "bea?1": ("DatasetName", ""),
-    "bea?2": ("Key", ""),
-    "bea?3": ("Key", "^(Exp|Imp|Bal)(Gds|Serv|GdsServ)$"),
-    "bea?4": ("Key", "Korea|Taiwan|Vietnam|Singapore|Switzerland|India|China|Japan|Canada|Mexico|Kingdom|Germany|Euro"),
-    "bea?5": ("AreaOrCountry", "^(SouthKorea|Taiwan|Vietnam|Singapore|Switzerland|India|China|Japan|Canada|Mexico|UnitedKingdom|Germany|EuroArea|AllCountries)$"),
-    "bea?6": ("AreaOrCountry", "^(SouthKorea|Taiwan|Vietnam|Singapore|Switzerland|India|China|Japan|Canada|Mexico|UnitedKingdom|Germany|EuroArea|AllCountries)$"),
-    "bea?7": ("AreaOrCountry", "^(SouthKorea|Taiwan|Vietnam|Singapore|Switzerland|India|China|Japan|Canada|Mexico|UnitedKingdom|Germany|EuroArea|AllCountries)$"),
-    "bea?8": ("AreaOrCountry", "^(SouthKorea|Taiwan|Vietnam|Singapore|Switzerland|India|China|Japan|Canada|Mexico|UnitedKingdom|Germany|EuroArea|AllCountries)$"),
 }
 # HTML answers where an API was expected: print the page <title> only.
 TITLES = {"census?1", "census?2", "census?3", "census?4"}
@@ -166,6 +163,12 @@ def probe(url: str, marker: str = "", headers: dict[str, str] | None = None,
             f"{marker} {found}".strip(), f"{time.monotonic() - t0:.1f}s"), body
 
 
+def marker_for(label: str) -> str:
+    if label.startswith("bea:"):
+        return "TimePeriod"  # at least one data row
+    return MARKERS.get(label, "")
+
+
 def main() -> int:
     reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
     lines = ["| source | status | bytes | type | body | marker | time |",
@@ -180,7 +183,7 @@ def main() -> int:
         if creds is None:
             lines.append(f"| {label} | needs secret {src['secret']} (not set; not requested) | | | | | |")
             continue
-        cells, body = probe(url, MARKERS.get(label, ""), *creds)
+        cells, body = probe(url, marker_for(label), *creds)
         lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
         if label in TITLES and cells[3] == "html":
             m = re.search(rb"<title[^>]*>(.*?)</title>", body, re.I | re.S)

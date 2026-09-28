@@ -57,22 +57,13 @@ note = "keyless routes are gone; keyed call returns full history as JSON (~6.8 M
 # TBD sources: `candidates` are probed by scripts/probe_sources.py; the one that
 # works from GitHub's runners becomes `url`.
 [sources.bea]
-url = "TBD"
-# BEA API: free key, stored ONLY as Actions secret BEA_API_KEY, sent as the
-# UserID query parameter. Probe: catalog (datasets, ITA frequencies,
-# indicators, countries), then one quarterly Korea goods+services call.
+# BEA API, International Transactions (ITA): quarterly by partner. Free key,
+# stored ONLY as Actions secret BEA_API_KEY, sent as the UserID query param.
+# Probe 2026-09-28: frequencies A/QNSA/QSA only (no monthly); country names
+# like SouthKorea; AreaOrCountry=AllCountries returns the world total only.
+url = "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year={prev_year}&ResultFormat=JSON&Indicator={key}&AreaOrCountry={area}"
 secret = "BEA_API_KEY"
 auth_param = "UserID"
-candidates = [
-  "https://apps.bea.gov/api/data?method=GetDataSetList&ResultFormat=JSON",
-  "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ParameterName=Frequency&ResultFormat=JSON",
-  "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ParameterName=Indicator&ResultFormat=JSON",
-  "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ParameterName=AreaOrCountry&ResultFormat=JSON",
-  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year=2025&ResultFormat=JSON&AreaOrCountry=AllCountries&Indicator=ExpGds",
-  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year=2025&ResultFormat=JSON&AreaOrCountry=AllCountries&Indicator=ImpGds",
-  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year=2025&ResultFormat=JSON&AreaOrCountry=AllCountries&Indicator=ExpServ",
-  "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QSA&Year=2025&ResultFormat=JSON&AreaOrCountry=AllCountries&Indicator=ImpServ",
-]
 
 [sources.census]
 url = "TBD"
@@ -316,4 +307,20 @@ freq = "monthly"
 units = "USD millions, not seasonally adjusted"
 use = "G"
 status = "active"
+redistribution = "open"
+
+[[series]]
+id = "TRADE_BEA"
+source = "bea"
+# Goods and services, exports and imports, by partner (BoP basis, quarterly SA).
+# Combined G&S (ExpGdsServ) returned no rows for SouthKorea, so goods and
+# services are collected separately. Delivered id: TRADE_BEA_<Indicator>_<Area>.
+key = ["ExpGds", "ImpGds", "ExpServ", "ImpServ"]
+areas = ["AllCountries", "EuroArea", "Canada", "Mexico", "China", "Japan", "Germany",
+         "UnitedKingdom", "SouthKorea", "Taiwan", "Vietnam", "India", "Switzerland",
+         "Singapore", "Europe"]
+freq = "quarterly"
+units = "USD millions, seasonally adjusted"
+use = "G"
+status = "tbd"  # -> active per the per-partner probe
 redistribution = "open"
