@@ -9,6 +9,7 @@ data itself, so the public workflow log carries no restricted values.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import time
@@ -62,8 +63,38 @@ MARKERS = {
     "rba": "FIRMMCRTD",
     "mas?1": "sora",
     "mas?2": "sora",
+    "mas?4": "sora",
+    "mas?5": "sora",
+    "mas?6": "sora",
     "cape?1": "ie_data",
 }
+
+# Catalog searches: print (id | title) of entries whose title mentions the
+# term, so a dataset id can be picked. Catalog metadata only, never values.
+DISCOVER = {"mas?5": "sora", "mas?6": "sora"}
+
+
+def discover(body: bytes, term: str) -> list[str]:
+    try:
+        doc = json.loads(body)
+    except ValueError:
+        return []
+    found: set[str] = set()
+
+    def walk(o: object) -> None:
+        if isinstance(o, dict):
+            title = str(o.get("title") or o.get("name") or "")
+            ident = o.get("datasetId") or o.get("id")
+            if ident and term in title.lower():
+                found.add(f"{ident} | {title[:80]}")
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    walk(doc)
+    return sorted(found)[:20]
 
 
 def sniff(body: bytes) -> str:
@@ -82,7 +113,8 @@ def sniff(body: bytes) -> str:
     return "other"
 
 
-def probe(url: str, marker: str = "") -> tuple[str, str, str, str, str, str]:
+def probe(url: str, marker: str = "") -> tuple[tuple[str, ...], bytes]:
+    """(table cells, body). The body is only inspected, never printed."""
     t0 = time.monotonic()
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     try:
@@ -95,21 +127,27 @@ def probe(url: str, marker: str = "") -> tuple[str, str, str, str, str, str]:
         status, ctype, body = f"ERR {type(e).__name__}", "", b""
     found = ("yes" if marker.lower().encode() in body.lower() else "no") if marker else ""
     return (status, f"{len(body):,}", ctype.split(";")[0], sniff(body),
-            f"{marker} {found}".strip(), f"{time.monotonic() - t0:.1f}s")
+            f"{marker} {found}".strip(), f"{time.monotonic() - t0:.1f}s"), body
 
 
 def main() -> int:
     reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
     lines = ["| source | status | bytes | type | body | marker | time |",
              "|---|---|---|---|---|---|---|"]
+    catalog: list[str] = []
     for label, url in probe_urls(reg):
         if not url:
             lines.append(f"| {label} | TBD (no url yet) | | | | | |")
             continue
-        lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(
-            label, *probe(url, MARKERS.get(label, ""))))
+        cells, body = probe(url, MARKERS.get(label, ""))
+        lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
+        if label in DISCOVER:
+            hits = discover(body, DISCOVER[label])
+            catalog.append(f"- {label}: " + ("; ".join(hits) if hits else "no catalog matches"))
         time.sleep(1)  # one request at a time, politely
     table = "\n".join(lines)
+    if catalog:
+        table += "\n\nCatalog matches:\n" + "\n".join(catalog)
     print(table)
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:

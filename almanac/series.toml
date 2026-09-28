@@ -55,6 +55,10 @@ candidates = [
   "https://eservices.mas.gov.sg/api/action/datastore/search.json?resource_id=9a0bf149-308c-4bd2-832d-76c8e6cb47ed&limit=5",
   "https://eservices.mas.gov.sg/statistics/dir/domesticinterestrates.aspx",
   "https://eservices.mas.gov.sg/apimg-gw/server/monthly_statistical_bulletin_non610mssql/domestic_interest_rates_daily/views/domestic_interest_rates_daily",
+  # data.gov.sg (Singapore's official open-data portal; MAS publishes there)
+  "https://data.gov.sg/api/action/datastore_search?resource_id=9a0bf14e-15e3-424e-973d-2338f019b53f&limit=5",
+  "https://data.gov.sg/api/action/package_search?q=SORA",
+  "https://api-production.data.gov.sg/v2/public/api/datasets?query=SORA",
 ]
 [sources.cape]
 url = "TBD"
