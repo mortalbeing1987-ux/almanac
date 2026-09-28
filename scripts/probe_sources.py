@@ -35,19 +35,43 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     for name, src in reg["sources"].items():
         url = src["url"]
         if url == "TBD":
-            out.append((name, ""))
+            cands = src.get("candidates", [])
+            out.extend((f"{name}?{i}", c) for i, c in enumerate(cands, 1))
+            if not cands:
+                out.append((name, ""))
             continue
         key = first_key.get(name, "")
         if name == "cboe":
             key = "VIX"
         out.append((name, url.format(key=key, year=year)))
+    # candidate keys on sources that already have a url (e.g. SARON on snb)
+    for s in reg.get("series", []):
+        for c in s.get("candidates", []):
+            url = reg["sources"][s["source"]]["url"]
+            out.append((f"{s['id']}?{c}", url.format(key=c, year=year)))
     # a few extra FRED probes so a partial block is visible
-    for k in ("BAMLH0A0HYM2", "NFCI", "CPIAUCSL"):
+    for k in ("BAMLH0A0HYM2", "BAMLC0A4CBBB", "DFII10", "T10Y3M", "DTWEXBGS", "ICSA", "NFCI", "CPIAUCSL"):
         out.append((f"fred:{k}", reg["sources"]["fred"]["url"].format(key=k)))
     return out
 
 
-def probe(url: str) -> tuple[str, str, str, str]:
+def sniff(body: bytes) -> str:
+    """Shape of the body only (csv/json/html/xls/...), never its values."""
+    head = body[:512].lstrip().lower()
+    if not head:
+        return "empty"
+    if head.startswith((b"<!doctype html", b"<html")) or b"<html" in head:
+        return "html"
+    if head[:1] in (b"{", b"["):
+        return "json"
+    if head.startswith(b"\xd0\xcf\x11\xe0") or head.startswith(b"pk"):
+        return "xls/zip"
+    if b"," in head or b";" in head or b"\t" in head:
+        return "delimited"
+    return "other"
+
+
+def probe(url: str) -> tuple[str, str, str, str, str]:
     t0 = time.monotonic()
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     try:
@@ -58,17 +82,18 @@ def probe(url: str) -> tuple[str, str, str, str]:
         status, ctype, body = str(e.code), e.headers.get("Content-Type", ""), b""
     except Exception as e:  # timeout, DNS, TLS, reset
         status, ctype, body = f"ERR {type(e).__name__}", "", b""
-    return status, f"{len(body):,}", ctype.split(";")[0], f"{time.monotonic() - t0:.1f}s"
+    return (status, f"{len(body):,}", ctype.split(";")[0], sniff(body),
+            f"{time.monotonic() - t0:.1f}s")
 
 
 def main() -> int:
     reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
-    lines = ["| source | status | bytes | type | time |", "|---|---|---|---|---|"]
+    lines = ["| source | status | bytes | type | body | time |", "|---|---|---|---|---|---|"]
     for label, url in probe_urls(reg):
         if not url:
-            lines.append(f"| {label} | TBD (no url yet) | | | |")
+            lines.append(f"| {label} | TBD (no url yet) | | | | |")
             continue
-        lines.append("| {} | {} | {} | {} | {} |".format(label, *probe(url)))
+        lines.append("| {} | {} | {} | {} | {} | {} |".format(label, *probe(url)))
         time.sleep(1)  # one request at a time, politely
     table = "\n".join(lines)
     print(table)

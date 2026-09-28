@@ -36,14 +36,30 @@ url = "https://www.cftc.gov/dea/newcot/deafut.txt"
 [sources.fed_fomc]
 url = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
 
+# TBD sources: `candidates` are probed by scripts/probe_sources.py; the one that
+# works from GitHub's runners becomes `url`.
 [sources.boj]
 url = "TBD"
+candidates = [
+  "https://www.stat-search.boj.or.jp/api/v1/getDataCode?format=csv&lang=en&db=FM01&code=STRDCLUCON",
+]
 [sources.rba]
 url = "TBD"
+candidates = [
+  "https://www.rba.gov.au/statistics/tables/csv/f1-data.csv",
+  "https://www.rba.gov.au/statistics/tables/csv/f1.1-data.csv",
+]
 [sources.mas]
 url = "TBD"
+candidates = [
+  "https://eservices.mas.gov.sg/api/action/datastore/search.json?resource_id=9a0bf149-308c-4bd2-832d-76c8e6cb47ed&limit=5",
+  "https://eservices.mas.gov.sg/statistics/dir/domesticinterestrates.aspx",
+]
 [sources.cape]
 url = "TBD"
+candidates = [
+  "https://shillerdata.com/",
+]
 
 # ---- A. Curve & credit -------------------------------------------------------
 [[series]]
@@ -122,6 +138,7 @@ redistribution = "open"
 id = "SARON"
 source = "snb"
 key = "TBD"
+candidates = ["zirepo", "snbgwdzid"]  # SNB cubes that may carry SARON
 freq = "daily"
 units = "percent"
 use = "B"
