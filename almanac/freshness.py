@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from .registry import delivered_id, keys
+from .registry import delivered_id, key_of, key_settings, keys
 
 # Default max age (days between the latest observation and today) by frequency;
 # a series can override with `max_age_days` in the registry.
@@ -25,20 +25,25 @@ def expected_ids(series: dict) -> list[str]:
     return [delivered_id(series, k) for k in keys(series)]
 
 
-def max_age(series: dict) -> int | None:
-    return series.get("max_age_days", MAX_AGE_DAYS.get(series["freq"]))
+def max_age(series: dict, key: str | None = None) -> int | None:
+    """Per key: a weekly code inside a daily series gets the weekly default,
+    and `max_age_days` (series-level or per_key) overrides for publication lag."""
+    ks = key_settings(series, key)
+    return ks.get("max_age_days", MAX_AGE_DAYS.get(ks.get("freq", "")))
 
 
 def summary(selected: list[dict], state, today: date) -> dict:
     """Freshness for every delivered id of the selected series."""
     out: dict[str, dict] = {}
     for s in selected:
-        limit = max_age(s)
+        if s["freq"] == "event":
+            continue
         ids = set(expected_ids(s)) | {sid for sid, m in state.series.items()
                                        if m.get("source") == s["source"]
                                        and (sid == s["id"] or sid.startswith(s["id"] + "_"))}
         for sid in sorted(ids):
             meta = state.series.get(sid, {})
+            limit = max_age(s, key_of(s, sid))
             last = meta.get("last_obs")
             age = (today - date.fromisoformat(last)).days if last else None
             out[sid] = {

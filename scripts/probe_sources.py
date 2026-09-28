@@ -69,6 +69,12 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     # a few extra FRED probes so a partial block is visible
     for k in ("BAMLH0A0HYM2", "BAMLC0A4CBBB", "DFII10", "T10Y3M", "DTWEXBGS", "DTWEXAFEGS", "DTWEXEMEGS", "ICSA", "NFCI", "CPIAUCSL"):
         out.append((f"fred:{k}", reg["sources"]["fred"]["url"].format(key=k, **fmt)))
+    # every CBOE file (VIX is already probed above as the source's first key)
+    for k in ("VIX3M", "VVIX"):
+        out.append((f"cboe:{k}", reg["sources"]["cboe"]["url"].format(key=k, **fmt)))
+    # full-history FRED files for the weekly / lagged series (cosd from 1900)
+    for k in ("NFCI", "ICSA", "DTWEXBGS", "T10Y3M"):
+        out.append((f"fredfull:{k}", reg["sources"]["fred"]["url"].format(key=k, **dict(fmt, since="1900-01-01"))))
     return out
 
 
@@ -166,7 +172,17 @@ def list_values(body: bytes, field: str, pattern: str) -> str:
 # Layout ("shape") of a response, for writing parsers and fixtures: every
 # digit is replaced by 9, so no value can be read back. Labels, codes and
 # header names stay visible. Enabled for the step-1 sources.
-SHAPE = {"fred", "treasury", "nyfed", "ecb", "snb", "boj", "rba", "mas"}
+SHAPE = {"cboe", "cboe:VIX3M", "cboe:VVIX", "fred:NFCI", "fred:ICSA"}
+# Latest and earliest observation DATES only (first CSV column), to measure
+# publication lag and history depth. Dates are not values.
+DATE_SPAN = {"cboe", "cboe:VIX3M", "cboe:VVIX", "fredfull:NFCI", "fredfull:ICSA",
+             "fredfull:DTWEXBGS", "fredfull:T10Y3M"}
+
+
+def date_span(body: bytes) -> str:
+    rows = [line.split(",")[0].strip() for line in body.decode("utf-8-sig", "replace").splitlines()[1:]
+            if line.strip()]
+    return f"{len(rows)} rows, first {rows[0]}, last {rows[-1]}" if rows else "no rows"
 
 def mask(s: str) -> str:
     """Numbers and dates -> 9s; digits inside codes (DGS10, 1TGT) are kept."""
@@ -277,7 +293,7 @@ def main() -> int:
         if not url:
             lines.append(f"| {label} | TBD (no url yet) | | | | | |")
             continue
-        src = reg["sources"].get(label.split("?")[0].split(":")[0], {})
+        src = reg["sources"].get(label.split("?")[0].split(":")[0].replace("fredfull", "fred"), {})
         creds = auth(src)
         if creds is None:
             lines.append(f"| {label} | needs secret {src['secret']} (not set; not requested) | | | | | |")
@@ -286,6 +302,8 @@ def main() -> int:
         lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
         if label in SHAPE and body:
             details.append(f"- {label} shape: {shape(body)}")
+        if label in DATE_SPAN and body:
+            details.append(f"- {label} dates: {date_span(body)}")
         if label in TITLES and cells[3] == "html":
             m = re.search(rb"<title[^>]*>(.*?)</title>", body, re.I | re.S)
             details.append(f"- {label} page title: {m.group(1).decode('utf-8', 'replace').strip()[:120] if m else 'none'}")

@@ -1,5 +1,5 @@
 """python -m almanac collect --uses AB --since 2026-09-01 --out out/
-python -m almanac deliver --data-dir <checked-out private data repo> --uses AB
+python -m almanac deliver --data-dir <checked-out private data repo> --uses ABCD
 
 `collect` fetches and writes one bundle to --out; `deliver` runs a scheduled
 pass with delivery state (see deliver.py). Both print per-source status and
@@ -30,15 +30,21 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--out", type=Path, default=Path("out"))
     d = sub.add_parser("deliver", help="scheduled pass into a checked-out private data repo")
     d.add_argument("--data-dir", type=Path, required=True)
-    d.add_argument("--uses", default="ABD", help="use-case tags, e.g. ABD (D = event calendar)")
+    d.add_argument("--uses", default="ABCD", help="use-case tags, e.g. ABCD (D = event calendar)")
     args = ap.parse_args(argv)
 
     if args.cmd == "deliver":
         status = deliver.run(load(), args.data_dir, args.uses)
         for src, s in sorted(status["sources"].items()):
             print(f"{src:10s} {s['status']:7s} {s['observations']:6d} obs  since {s['since']}  {s['reason']}")
-        print(f"rows delivered: {status['rows_delivered']}  bundle: {status['bundle']}")
-        print(f"stale series: {len(status['freshness']['stale'])}")
+        size = ""
+        if status["bundle"]:
+            parquet = args.data_dir / "bundles" / status["bundle"] / "observations.parquet"
+            size = f"  ({parquet.stat().st_size / 1e6:.2f} MB)"
+        print(f"rows delivered: {status['rows_delivered']} (revisions: {status['revisions_delivered']})"
+              f"  bundle: {status['bundle']}{size}")
+        stale = status["freshness"]["stale"]
+        print(f"stale series: {len(stale)}{'  ' + ', '.join(stale) if stale else ''}")
         for src, s in sorted(status["calendar_sources"].items()):
             print(f"{src:16s} {s['status']:7s} {s['events']:3d} events  furthest {s['furthest_event']}  {s['reason']}")
         if status["calendar_sources"]:

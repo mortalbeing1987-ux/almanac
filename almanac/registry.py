@@ -45,6 +45,27 @@ def delivered_id(series: dict, key: str) -> str:
     return f"{series['id']}_{key}" if isinstance(series["key"], list) else series["id"]
 
 
+PER_KEY_FIELDS = ("freq", "max_age_days", "lookback_days")
+
+
+def key_settings(series: dict, key: str | None) -> dict:
+    """freq / max_age_days / lookback_days for one key of a series: the series'
+    own values, overridden by `per_key.<key>` where the registry sets them (e.g.
+    a weekly code inside an otherwise daily series)."""
+    out = {f: series[f] for f in PER_KEY_FIELDS if f in series}
+    if key is not None:
+        out.update({f: v for f, v in series.get("per_key", {}).get(key, {}).items()
+                    if f in PER_KEY_FIELDS})
+    return out
+
+
+def key_of(series: dict, delivered: str) -> str | None:
+    """The registry key behind a delivered id (`<id>_<key>`), or None."""
+    if isinstance(series["key"], list) and delivered.startswith(series["id"] + "_"):
+        return delivered[len(series["id"]) + 1:]
+    return None
+
+
 def auth(src: dict) -> tuple[dict[str, str], dict[str, str]]:
     """(headers, query params) carrying a source's API key from its Actions secret.
 

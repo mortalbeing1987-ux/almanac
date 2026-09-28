@@ -85,15 +85,16 @@ def test_since_backfills_new_series_and_looks_back_otherwise():
     reg = mini_registry()
     today = date(2026, 9, 28)
     st = state_mod.State(series={"A1": {"last_obs": "2026-09-25"}, "A2": {"last_obs": "2026-09-26"}})
-    since = deliver.since_by_source(reg.select("B"), st, today, backfill=365)
-    assert since["a"] == date(2026, 8, 26)  # daily: oldest last_obs minus 30 days
-    assert since["b"] == date(2025, 9, 28)  # never delivered: backfill
+    since = deliver.since_by_series(reg.select("B"), st, today, backfill=365)
+    assert since["A1"] == date(2026, 8, 26)  # daily: last_obs minus 30 days
+    assert since["A2"] == date(2026, 8, 27)
+    assert since["B1"] == date(2025, 9, 28)  # never delivered: backfill
 
 
 def test_lookback_depends_on_frequency():
     assert [deliver.lookback_days({"freq": f}) for f in ("daily", "weekly", "monthly", "quarterly")] \
         == [30, 90, 400, 800]
-    assert deliver.lookback_days({"freq": "mixed (daily/weekly per key)"}) == 30
+    assert deliver.lookback_days({"freq": "event"}) == 30
     assert deliver.lookback_days({"freq": "monthly", "lookback_days": 1200}) == 1200
 
 
@@ -101,18 +102,22 @@ def test_monthly_series_looks_back_further_and_override_wins():
     reg = mini_registry()
     today = date(2026, 9, 28)
     st = state_mod.State(series={"B1_x": {"last_obs": "2026-08-01"}, "B1_y": {"last_obs": "2026-08-01"}})
-    since = deliver.since_by_source([s for s in reg.select("B") if s["id"] == "B1"], st, today)
-    assert since["b"] == date(2025, 6, 27)  # 2026-08-01 minus 400 days
-    b1 = dict(next(s for s in reg.select("B") if s["id"] == "B1"), lookback_days=10)
-    assert deliver.since_by_source([b1], st, today)["b"] == date(2026, 7, 22)
+    b1 = [s for s in reg.select("B") if s["id"] == "B1"]
+    assert deliver.since_by_series(b1, st, today)["B1"] == date(2025, 6, 27)  # minus 400 days
+    assert deliver.since_by_series([dict(b1[0], lookback_days=10)], st, today)["B1"] == date(2026, 7, 22)
 
 
-def test_source_takes_the_earliest_start_of_its_series():
+def test_series_of_one_source_keep_their_own_start():
+    """Per series, not per source: one series' long look-back or full backfill
+    must not drag another series of the same source back with it."""
     reg = Registry(sources={"f": {"url": "x"}}, series=[
         {"id": "D", "source": "f", "key": "d", "freq": "daily", "use": "B", "status": "active"},
-        {"id": "Q", "source": "f", "key": "q", "freq": "quarterly", "use": "B", "status": "active"}])
+        {"id": "Q", "source": "f", "key": "q", "freq": "quarterly", "use": "B", "status": "active"},
+        {"id": "N", "source": "f", "key": "n", "freq": "daily", "use": "C", "status": "active",
+         "backfill": "full"}])
     st = state_mod.State(series={"D": {"last_obs": "2026-09-25"}, "Q": {"last_obs": "2026-04-01"}})
-    assert deliver.since_by_source(reg.select("B"), st, date(2026, 9, 28))["f"] == date(2024, 1, 22)
+    since = deliver.since_by_series(reg.select("BC"), st, date(2026, 9, 28))
+    assert since == {"D": date(2026, 8, 26), "Q": date(2024, 1, 22), "N": deliver.FULL_HISTORY}
 
 
 def test_every_registry_series_gets_a_known_lookback():
@@ -268,3 +273,17 @@ def test_status_json_lists_ids_in_window_only_for_ok_sources(tmp_path):
     assert s2["events_delivered"] == 0  # nothing new; the withdrawal is visible only via the list
     on_disk = json.loads((tmp_path / "status.json").read_text())
     assert "event_ids_in_window" not in on_disk["calendar_sources"]["down"]
+
+
+def test_status_counts_revisions(tmp_path):
+    reg = mini_registry()
+
+    def col(values):
+        return lambda reg_, uses, http, since, today: collect(
+            reg_, uses, http, since, today, {"a": fetcher(values), "b": fetcher(values)})
+
+    vals = {"A1": [("2026-09-24", 1.0), ("2026-09-25", 1.1)]}
+    assert deliver.run(reg, tmp_path, "B", now=NOW, collector=col(vals))["revisions_delivered"] == 0
+    vals = {"A1": [("2026-09-24", 1.05), ("2026-09-25", 1.1), ("2026-09-26", 1.2)]}
+    s = deliver.run(reg, tmp_path, "B", now=datetime(2026, 9, 29, 2, 30, tzinfo=timezone.utc), collector=col(vals))
+    assert (s["rows_delivered"], s["revisions_delivered"]) == (2, 1)
