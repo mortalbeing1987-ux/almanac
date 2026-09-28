@@ -168,6 +168,35 @@ def list_values(body: bytes, field: str, pattern: str) -> str:
 # header names stay visible. Enabled for the step-1 sources.
 SHAPE = {"fred", "treasury", "nyfed", "ecb", "snb", "boj", "rba", "mas"}
 
+# Calendar pages (step 4 research): raw excerpts around a keyword, to see the
+# markup a parser needs. Event dates are public schedule facts, not data
+# values, so they are shown unmasked. (label -> keyword regex)
+SNIPPETS = {
+    "cal_research?1": r"fomc-meeting__date|fomc-meeting__month",
+    "cal_research?2": r"(?i)monetary policy assessment",
+    "cal_research?3": r"(?i)monetary policy meeting",
+    "cal_research?4": r"(?i)<table|Monetary Policy Meeting",
+    "cal_research?5": r"(?i)<table|Monetary Policy Board",
+    "cal_research?6": r"(?i)Monetary Policy Statement",
+    "cal_research?7": r"Consumer Price Index|Employment Situation",
+    "cal_research?8": r".",
+    "cal_research?9": r".",
+    "cal_research?10": r".",
+    "cal_research?11": r"(?i)GDP|Gross Domestic Product",
+}
+
+
+def snippets(body: bytes, pattern: str, n: int = 6, width: int = 380) -> str:
+    text = body.decode("utf-8", "replace")
+    out = []
+    for m in re.finditer(pattern, text):
+        if len(out) >= n:
+            break
+        chunk = re.sub(r"\s+", " ", text[max(0, m.start() - 80): m.start() + width])
+        if not any(chunk[:60] in o for o in out):
+            out.append(chunk)
+    return f"{len(text):,} chars; " + ("\n    " + "\n    ".join(out) if out else "no match")
+
 
 def mask(s: str) -> str:
     """Numbers and dates -> 9s; digits inside codes (DGS10, 1TGT) are kept."""
@@ -287,6 +316,8 @@ def main() -> int:
         lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
         if label in SHAPE and body:
             details.append(f"- {label} shape: {shape(body)}")
+        if label in SNIPPETS and body:
+            details.append(f"- {label} excerpts: {snippets(body, SNIPPETS[label])}")
         if label in TITLES and cells[3] == "html":
             m = re.search(rb"<title[^>]*>(.*?)</title>", body, re.I | re.S)
             details.append(f"- {label} page title: {m.group(1).decode('utf-8', 'replace').strip()[:120] if m else 'none'}")

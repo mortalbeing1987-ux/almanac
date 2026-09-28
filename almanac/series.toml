@@ -44,6 +44,24 @@ url = "https://www.cftc.gov/dea/newcot/deafut.txt"
 [sources.fed_fomc]
 url = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
 
+# Step 4 research: official calendar pages, probed for layout before fetchers
+# are written. Candidates are removed once each calendar has a verified url.
+[sources.cal_research]
+url = "TBD"
+candidates = [
+  "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm",
+  "https://www.snb.ch/en/the-snb/mandates-goals/monetary-policy/decisions",
+  "https://www.ecb.europa.eu/press/calendars/mgcgc/html/index.en.html",
+  "https://www.boj.or.jp/en/mopo/mpmsche_minu/index.htm",
+  "https://www.rba.gov.au/schedules-events/board-meeting-schedules.html",
+  "https://www.mas.gov.sg/monetary-policy/advance-release-calendar",
+  "https://www.bls.gov/schedule/news_release/bls.ics",
+  "https://alfred.stlouisfed.org/release/downloaddates?rid=10",
+  "https://alfred.stlouisfed.org/release/downloaddates?rid=50",
+  "https://alfred.stlouisfed.org/release/downloaddates?rid=53",
+  "https://www.bea.gov/news/schedule",
+]
+
 [sources.boj]
 url = "https://www.stat-search.boj.or.jp/api/v1/getDataCode?format=csv&lang=en&db=FM01&code={key}"
 note = "BoJ Time-Series Data Search API, keyless CSV; full history per call (~1.3 MB), narrow with startDate in the fetcher"
