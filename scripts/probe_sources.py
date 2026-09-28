@@ -55,6 +55,21 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     return out
 
 
+# Marker strings a candidate's body must contain for the right series to be
+# there. Only "yes"/"no" is reported, never the surrounding values.
+MARKERS = {
+    "boj?1": "STRDCLUCON",
+    "rba?1": "FIRMMCRTD",
+    "rba?2": "FIRMMCRTD",
+    "mas?1": "sora",
+    "mas?2": "sora",
+    "cape?1": "ie_data",
+    "SARON?zirepo": "SARON",
+    "SARON?snbgwdzid": "SARON",
+    "SARON?zimoma": "SARON",
+}
+
+
 def sniff(body: bytes) -> str:
     """Shape of the body only (csv/json/html/xls/...), never its values."""
     head = body[:512].lstrip().lower()
@@ -71,7 +86,7 @@ def sniff(body: bytes) -> str:
     return "other"
 
 
-def probe(url: str) -> tuple[str, str, str, str, str]:
+def probe(url: str, marker: str = "") -> tuple[str, str, str, str, str, str]:
     t0 = time.monotonic()
     req = urllib.request.Request(url, headers={"User-Agent": UA})
     try:
@@ -82,18 +97,21 @@ def probe(url: str) -> tuple[str, str, str, str, str]:
         status, ctype, body = str(e.code), e.headers.get("Content-Type", ""), b""
     except Exception as e:  # timeout, DNS, TLS, reset
         status, ctype, body = f"ERR {type(e).__name__}", "", b""
+    found = ("yes" if marker.lower().encode() in body.lower() else "no") if marker else ""
     return (status, f"{len(body):,}", ctype.split(";")[0], sniff(body),
-            f"{time.monotonic() - t0:.1f}s")
+            f"{marker} {found}".strip(), f"{time.monotonic() - t0:.1f}s")
 
 
 def main() -> int:
     reg = tomllib.loads(REGISTRY.read_text(encoding="utf-8"))
-    lines = ["| source | status | bytes | type | body | time |", "|---|---|---|---|---|---|"]
+    lines = ["| source | status | bytes | type | body | marker | time |",
+             "|---|---|---|---|---|---|---|"]
     for label, url in probe_urls(reg):
         if not url:
-            lines.append(f"| {label} | TBD (no url yet) | | | | |")
+            lines.append(f"| {label} | TBD (no url yet) | | | | | |")
             continue
-        lines.append("| {} | {} | {} | {} | {} | {} |".format(label, *probe(url)))
+        lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(
+            label, *probe(url, MARKERS.get(label, ""))))
         time.sleep(1)  # one request at a time, politely
     table = "\n".join(lines)
     print(table)
