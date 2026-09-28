@@ -75,6 +75,20 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     # full-history FRED files for the weekly / lagged series (cosd from 1900)
     for k in ("NFCI", "ICSA", "DTWEXBGS", "T10Y3M"):
         out.append((f"fredfull:{k}", reg["sources"]["fred"]["url"].format(key=k, **dict(fmt, since="1900-01-01"))))
+    # PR 7: CORRA (Bank of Canada Valet) and SONIA (Bank of England IADB), plus
+    # each bank's terms pages (text excerpts only)
+    out.append(("corra:csv", "https://www.bankofcanada.ca/valet/observations/AVG.INTWO/csv?start_date=" + fmt["since"]))
+    out.append(("corra:json", "https://www.bankofcanada.ca/valet/observations/AVG.INTWO/json?start_date=" + fmt["since"]))
+    out.append(("corra:full", "https://www.bankofcanada.ca/valet/observations/AVG.INTWO/csv"))
+    out.append(("corra:terms", "https://www.bankofcanada.ca/terms/"))
+    iadb = ("https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes"
+            "&Datefrom={frm}&Dateto=now&SeriesCodes=IUDSOIA&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N")
+    since = date.fromisoformat(fmt["since"])
+    out.append(("sonia:csv", iadb.format(frm=since.strftime("%d/%b/%Y"))))
+    out.append(("sonia:full", iadb.format(frm="01/Jan/1990")))
+    out.append(("sonia:terms", "https://www.bankofengland.co.uk/markets/sonia-benchmark/sonia-key-features-and-policies"))
+    out.append(("sonia:legal", "https://www.bankofengland.co.uk/legal"))
+    out.append(("sonia:dbterms", "https://www.bankofengland.co.uk/statistics/details/further-details-about-sonia-data"))
     # use case F: FRED release calendars (release DATES only) to measure how old
     # the latest monthly value gets before the next release; full-history spans
     for rid in ("10", "50"):  # CPI, Employment Situation
@@ -186,7 +200,7 @@ def list_values(body: bytes, field: str, pattern: str) -> str:
 # Layout ("shape") of a response, for writing parsers and fixtures: every
 # digit is replaced by 9, so no value can be read back. Labels, codes and
 # header names stay visible. Enabled for the step-1 sources.
-SHAPE = {"cftc", "snb:snbgwdchfsgw"}
+SHAPE = {"cftc", "snb:snbgwdchfsgw", "corra:csv", "corra:json", "sonia:csv"}
 # Latest and earliest observation DATES only (first CSV column), to measure
 # publication lag and history depth. Dates are not values.
 DATE_SPAN = {"fredfull:CPIAUCSL", "fredfull:CPIAUCNS", "fredfull:CPILFESL", "fredfull:UNRATE",
@@ -279,6 +293,27 @@ def snb_codes(body: bytes) -> str:
             days[f[1]][wd] += 1
     return (f"header {cols}\n    non-empty by weekday: {days}\n    " + "\n    ".join(
         f"{k}: {len(v)} rows, {min(v)}..{max(v)}" for k, v in sorted(combos.items())))
+
+
+# Terms pages: sentences mentioning these words (legal text, not data).
+TERMS = {"corra:terms": r"data|reproduc|licen|permission|commercial",
+         "sonia:terms": r"licen|redistribut|attribut|Open Government|free",
+         "sonia:legal": r"licen|Open Government|reproduc|database|statistic",
+         "sonia:dbterms": r"licen|redistribut|attribut|Open Government|free"}
+
+
+def sentences(body: bytes, pattern: str, limit: int = 14) -> str:
+    text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", body.decode("utf-8", "replace"), flags=re.S)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"&nbsp;|&#160;", " ", re.sub(r"\s+", " ", text))
+    hits = [x.strip() for x in re.split(r"(?<=[.;:])\s+", text) if re.search(pattern, x, re.I) and 30 < len(x) < 600]
+    return "\n    ".join(dict.fromkeys(hits[:limit])) or "no matching sentences"
+
+
+def csv_dates(body: bytes) -> str:
+    """First column date span of a CSV with any date format (SONIA IADB: 02 Jan 1997)."""
+    rows = [l.split(",")[0].strip().strip('"') for l in body.decode("utf-8-sig", "replace").splitlines()[1:] if l.strip()]
+    return f"{len(rows)} rows, first {rows[0]}, last {rows[-1]}" if rows else "no rows"
 
 
 def release_ages(dates: list) -> str:
@@ -420,6 +455,8 @@ def main() -> int:
             continue
         src = reg["sources"].get(label.split("?")[0].split(":")[0].replace("fredfull", "fred")
                                  .replace("cftczip", "cftc").replace("fredcal", "fred"), {})
+        if label.startswith(("corra", "sonia")):
+            src = {}
         creds = auth(src)
         if creds is None:
             lines.append(f"| {label} | needs secret {src['secret']} (not set; not requested) | | | | | |")
@@ -462,6 +499,12 @@ def main() -> int:
                 release_dates.setdefault(rid, []).extend(cal_fred.parse(body, rid))
             except Exception as e:  # layout change: say so, keep probing
                 details.append(f"- {label}: {type(e).__name__}")
+        if label in TERMS and body:
+            details.append(f"- {label} terms excerpts:\n    {sentences(body, TERMS[label])}")
+        if label == "corra:full" and body:
+            details.append(f"- corra:full dates: {csv_dates(body[body.find(b'date,'):] if b'date,' in body else body)}")
+        if label == "sonia:full" and body:
+            details.append(f"- sonia:full dates: {csv_dates(body)}")
         if label == "cftc" and body:
             details.append(f"- cftc (deafut.txt) currency rows: {cot_rows(body.decode('latin-1'))}")
         if label.startswith("cftczip:") and body:
