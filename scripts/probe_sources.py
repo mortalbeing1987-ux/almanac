@@ -97,9 +97,11 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
                             f"https://www.bea.gov/news/{py}/us-international-trade-goods-and-services-{months[m - 1]}-{yr}"))
     # euro-area composition: EA vs the sum of its members, picked by name (booleans only)
     out.append(("census:eacheck", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
-                "&time=from+2010-01+to+2010-02"))
+                "&time=from+2010-01+to+2010-01&time=2014-01"))
     out.append(("census:eacheck2", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
-                "&time=from+2022-10+to+2023-02"))
+                "&time=from+2019-12+to+2020-01"))
+    out.append(("census:eacheck3", "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
+                "&time=from+2021-12+to+2022-01"))
     cen2 = ("https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO"
             "&time=from+2026-04&CTY_CODE=-&CTY_CODE=0025&CTY_CODE=6021")
     out.append(("census:multi", cen2))
@@ -478,7 +480,10 @@ def ea_check(body: bytes) -> str:
             continue
         today = sum(x for n, x in v.items() if n != "EA")
         hr, bg = v.get("CROATIA", 0), v.get("BULGARIA", 0)
-        variants = {"all 21": today, "without BG": today - bg, "without HR": today - hr, "without HR+BG": today - hr - bg}
+        joined = {"ESTONIA": "2011-01", "LATVIA": "2014-01", "LITHUANIA": "2015-01", "CROATIA": "2023-01", "BULGARIA": "2026-01"}
+        at_time = sum(x for n, x in v.items() if n != "EA" and joined.get(n, "0") <= t)
+        variants = {"all 21": today, "without BG": today - bg, "at the time": at_time,
+                    "at the time + HR": at_time + (hr if t < "2023-01" else 0)}
         out.append(f"{t}: " + ", ".join(f"{k} {close(v['EA'], x)}" for k, x in variants.items()))
     return "; ".join(out)
 
