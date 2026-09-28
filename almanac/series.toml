@@ -65,6 +65,20 @@ url = "https://apps.bea.gov/api/data?method=GetData&DataSetName=ITA&Frequency=QS
 secret = "BEA_API_KEY"
 auth_param = "UserID"
 
+# Research (monthly headline trade, BEA/Census release tables vs FRED) --
+# temporary probe candidates, removed once a source is chosen.
+[sources.trade_release]
+url = "TBD"
+candidates = [
+  "https://www.bea.gov/data/intl-trade-investment/international-trade-goods-and-services",
+  "https://bea.gov/sites/default/files/2025-01/trad-time-series-1124.xlsx",
+  "https://www.census.gov/foreign-trade/statistics/historical/gands.xlsx",
+  "https://www.census.gov/foreign-trade/statistics/historical/gands.xls",
+  "https://www.census.gov/foreign-trade/statistics/historical/gands.txt",
+  "https://www.census.gov/foreign-trade/statistics/historical/index.html",
+  "https://fred.stlouisfed.org/graph/fredgraph.csv?id=BOPTEXP",
+]
+
 [sources.census]
 # Census international trade API: monthly goods by partner -- the original
 # source behind FRED's EXP*/IMP*. Free key, stored ONLY as Actions secret
