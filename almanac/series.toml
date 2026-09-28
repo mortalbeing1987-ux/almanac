@@ -175,6 +175,7 @@ units = "percent"
 use = "A"
 status = "active"
 redistribution = "open"
+backfill = "full"  # DFII* from 2003, T*YIE from 2003: percentiles need the long history
 
 # ---- B. Funding & carry inputs -----------------------------------------------
 [[series]]
