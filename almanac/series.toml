@@ -254,32 +254,35 @@ id = "TRADE_TOTAL"
 source = "fred"
 # BoP basis, SA: exports G&S, imports G&S, balance G&S, balance goods
 key = ["BOPTEXP", "BOPTIMP", "BOPGSTB", "BOPGTB"]
-candidates = ["BOPTEXP", "BOPTIMP", "BOPGSTB", "BOPGTB"]
 freq = "monthly"
 units = "USD millions, seasonally adjusted"
 use = "G"
-status = "tbd"
+status = "active"  # all four probed 200 CSV from runners 2026-09-28
 redistribution = "open"
 
 [[series]]
 id = "TRADE_BILATERAL"
 source = "fred"
 # Census goods trade by partner (exports FAS / imports customs basis), NSA.
-# FRED codes mix letter (EXPCH) and Census-number (IMP0004) forms: step 0
-# probes both and keeps the form that answers.
-# Partners: World, Canada, Mexico, China, Japan, Germany, United Kingdom, South Korea, Taiwan, Vietnam, India, Switzerland, Singapore, European Union
-key = "TBD"
-candidates = [
-  "EXP0004", "IMP0004", "EXPCA", "EXP1220", "IMPCA", "IMP1220", "EXPMX", "EXP2010",
-  "IMPMX", "IMP2010", "EXPCH", "EXP5700", "IMPCH", "IMP5700", "EXPJP", "EXP5880",
-  "IMPJP", "IMP5880", "EXPGE", "EXP4280", "IMPGE", "IMP4280", "EXPUK", "EXP4120",
-  "IMPUK", "IMP4120", "EXPKS", "EXP5800", "IMPKS", "IMP5800", "EXPTW", "EXP5830",
-  "IMPTW", "IMP5830", "EXPVM", "EXP5520", "IMPVM", "IMP5520", "EXPIN", "EXP5330",
-  "IMPIN", "IMP5330", "EXPSZ", "EXP4419", "IMPSZ", "IMP4419", "EXPSN", "EXP5590",
-  "IMPSN", "IMP5590", "EXP0003", "IMP0003",
+# FRED codes mix letter and Census-number forms; each below probed 200 CSV
+# from runners 2026-09-28. South Korea: neither EXPKS nor EXP5800 exists (404).
+key = [
+  "EXP0004", "IMP0004",  # World
+  "EXP0003", "IMP0003",  # European Union
+  "EXPCA", "IMPCA",      # Canada
+  "EXPMX", "IMPMX",      # Mexico
+  "EXPCH", "IMPCH",      # China
+  "EXPJP", "IMPJP",      # Japan
+  "EXPGE", "IMPGE",      # Germany
+  "EXPUK", "IMPUK",      # United Kingdom
+  "EXP5830", "IMP5830",  # Taiwan
+  "EXP5520", "IMP5520",  # Vietnam
+  "EXP5330", "IMP5330",  # India
+  "EXP4419", "IMP4419",  # Switzerland
+  "EXP5590", "IMP5590",  # Singapore
 ]
 freq = "monthly"
 units = "USD millions, not seasonally adjusted"
 use = "G"
-status = "tbd"
+status = "active"
 redistribution = "open"
