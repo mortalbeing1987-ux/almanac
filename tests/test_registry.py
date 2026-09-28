@@ -35,3 +35,12 @@ def test_keyed_sources_name_their_secret_and_header():
         if "secret" in src:
             assert src["secret"].isupper() and src["secret"].endswith("_API_KEY"), name
             assert src.get("auth_header"), name
+
+
+def test_no_source_key_listed_twice():
+    seen = set()
+    for s in REG["series"]:
+        keys = s["key"] if isinstance(s["key"], list) else [s["key"]]
+        for k in keys:
+            assert (s["source"], k) not in seen, (s["id"], k)
+            seen.add((s["source"], k))

@@ -50,7 +50,7 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
             url = reg["sources"][s["source"]]["url"]
             out.append((f"{s['id']}?{c}", url.format(key=c, year=year)))
     # a few extra FRED probes so a partial block is visible
-    for k in ("BAMLH0A0HYM2", "BAMLC0A4CBBB", "DFII10", "T10Y3M", "DTWEXBGS", "ICSA", "NFCI", "CPIAUCSL"):
+    for k in ("BAMLH0A0HYM2", "BAMLC0A4CBBB", "DFII10", "T10Y3M", "DTWEXBGS", "DTWEXAFEGS", "DTWEXEMEGS", "ICSA", "NFCI", "CPIAUCSL"):
         out.append((f"fred:{k}", reg["sources"]["fred"]["url"].format(key=k)))
     return out
 

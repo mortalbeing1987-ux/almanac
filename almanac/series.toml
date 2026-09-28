@@ -181,11 +181,23 @@ redistribution = "restricted"
 [[series]]
 id = "REGIME_FRED"
 source = "fred"
-key = ["T10Y3M", "T10Y2Y", "NFCI", "DTWEXBGS", "ICSA"]
+key = ["T10Y3M", "T10Y2Y", "NFCI", "ICSA"]
 freq = "mixed (daily/weekly per key)"
 units = "per FRED"
 use = "C"
 status = "active"
+redistribution = "open"
+
+[[series]]
+id = "USD_INDEX"
+source = "fred"
+# Fed H.10 nominal trade-weighted USD indexes: broad, advanced foreign
+# economies, emerging market economies
+key = ["DTWEXBGS", "DTWEXAFEGS", "DTWEXEMEGS"]
+freq = "daily"
+units = "index, Jan 2006 = 100"
+use = "C"
+status = "tbd"  # -> active once DTWEXAFEGS/DTWEXEMEGS probe 200
 redistribution = "open"
 
 # ---- D. Event calendar -------------------------------------------------------
