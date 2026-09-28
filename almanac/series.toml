@@ -74,8 +74,8 @@ url = "TBD"
 secret = "CENSUS_API_KEY"
 auth_param = "key"
 candidates = [
-  "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO&time=2026-06&CTY_CODE=5800",
-  "https://api.census.gov/data/timeseries/intltrade/imports/hs?get=CTY_CODE,CTY_NAME,GEN_VAL_MO&time=2026-06&CTY_CODE=5800",
+  "https://api.census.gov/data/timeseries/intltrade/exports/hs?get=CTY_CODE,CTY_NAME,ALL_VAL_MO&time=2026-06",
+  "https://api.census.gov/data/timeseries/intltrade/imports/hs?get=CTY_CODE,CTY_NAME,GEN_VAL_MO&time=2026-06",
 ]
 
 # ---- A. Curve & credit -------------------------------------------------------

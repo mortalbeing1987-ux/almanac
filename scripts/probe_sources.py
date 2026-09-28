@@ -82,6 +82,25 @@ MARKERS = {
 # frequency, indicator or country NAMES) matching a filter. Never data values.
 LISTS = {
 }
+# Census answers are JSON arrays (header row + rows): list "code name" of rows
+# whose CTY_NAME matches -- partner codes/names only, never the value column.
+CENSUS_ROWS = {
+    "census?1": "TOTAL FOR ALL|EUROPEAN UNION|CANADA|MEXICO|^CHINA$|JAPAN|GERMANY|UNITED KINGDOM|KOREA|TAIWAN|VIETNAM|INDIA|SWITZERLAND|SINGAPORE",
+    "census?2": "TOTAL FOR ALL|EUROPEAN UNION|CANADA|MEXICO|^CHINA$|JAPAN|GERMANY|UNITED KINGDOM|KOREA|TAIWAN|VIETNAM|INDIA|SWITZERLAND|SINGAPORE",
+}
+
+
+def census_rows(body: bytes, pattern: str) -> str:
+    try:
+        rows = json.loads(body)
+        head = rows[0]
+        ci, ni = head.index("CTY_CODE"), head.index("CTY_NAME")
+    except (ValueError, IndexError, TypeError, KeyError):
+        return "not a Census table"
+    hits = [f"{r[ci]} {r[ni]}" for r in rows[1:] if re.search(pattern, str(r[ni]))]
+    return f"{len(rows) - 1} rows; " + ", ".join(hits)
+
+
 # HTML answers where an API was expected: print the page <title> only.
 TITLES = {"census?1", "census?2"}
 
@@ -188,6 +207,8 @@ def main() -> int:
         if label in TITLES and cells[3] == "html":
             m = re.search(rb"<title[^>]*>(.*?)</title>", body, re.I | re.S)
             details.append(f"- {label} page title: {m.group(1).decode('utf-8', 'replace').strip()[:120] if m else 'none'}")
+        if label in CENSUS_ROWS and cells[3] == "json":
+            details.append(f"- {label}: {census_rows(body, CENSUS_ROWS[label])}")
         if label in LISTS:
             details.append(f"- {label}: {list_values(body, *LISTS[label])}")
         time.sleep(1)  # one request at a time, politely
