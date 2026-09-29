@@ -72,6 +72,17 @@ url = "https://cdn.cboe.com/api/global/us_indices/daily_prices/{key}_History.csv
 url = "https://www.cftc.gov/dea/newcot/deafut.txt"
 history_url = "https://www.cftc.gov/files/dea/history/deacot{year}.zip"
 
+[sources.fed_gz]
+# Federal Reserve Board, FEDS Notes: Gilchrist-Zakrajsek credit spread, excess
+# bond premium and model recession probability; one CSV with the whole history
+# (probe 2026-09-28: `date,gz_spread,ebp,est_prob`, M/D/YYYY on the 1st, 1973-01
+# to 2026-07). Board terms (federalreserve.gov/disclaimer.htm): "Unless
+# otherwise indicated, information on Board's website is in the public domain
+# and may be copied and distributed without permission"; the file and its Note
+# carry no third-party copyright. A staff research product: "the entire
+# history of the EBP may revise each month" and updates are "subject to delay".
+url = "https://www.federalreserve.gov/econres/notes/feds-notes/ebp_csv.csv"
+
 [sources.fed_fomc]
 url = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
 
@@ -192,6 +203,23 @@ status = "active"
 redistribution = "restricted"
 
 [[series]]
+id = "CREDIT_MOODYS"
+source = "fred"
+# Moody's seasoned Baa / Aaa corporate bond yield minus the 10-year Treasury:
+# long-history credit spreads (ICE_OAS on FRED now starts 2023). Probe
+# 2026-09-28: BAA10Y from 1986-01-02, AAA10Y from 1983-01-03, daily to 2026-09-25.
+key = ["BAA10Y", "AAA10Y"]
+freq = "daily"
+units = "percentage points"
+use = "A"
+status = "active"
+# FRED's series notes: "MOODY'S INFORMATION MAY NOT BE COPIED OR OTHERWISE
+# REPRODUCED, REPACKAGED, FURTHER TRANSMITTED, TRANSFERRED, DISSEMINATED,
+# REDISTRIBUTED OR RESOLD ... WITHOUT MOODY'S PRIOR WRITTEN CONSENT."
+redistribution = "restricted"
+backfill = "full"
+
+[[series]]
 id = "REAL_BE"
 source = "fred"
 key = ["DFII5", "DFII10", "T5YIE", "T10YIE"]
@@ -201,6 +229,23 @@ use = "A"
 status = "active"
 redistribution = "open"
 backfill = "full"  # DFII* from 2003, T*YIE from 2003: percentiles need the long history
+
+[[series]]
+id = "CREDIT_GZ"
+source = "fed_gz"
+# Gilchrist-Zakrajsek credit spread (GZ_SPREAD), excess bond premium (EBP),
+# both percentage points, and the model's 12-month-ahead recession probability
+# (EST_PROB, as published). Monthly, dated the 1st, from 1973-01.
+key = ["GZ_SPREAD", "EBP", "EST_PROB"]
+columns = { GZ_SPREAD = "gz_spread", EBP = "ebp", EST_PROB = "est_prob" }
+freq = "monthly"
+units = "percentage points (GZ_SPREAD, EBP); probability (EST_PROB)"
+use = "A"
+status = "active"
+redistribution = "open"  # Federal Reserve Board: public domain (see [sources.fed_gz])
+backfill = "full"
+lookback_days = 20000  # the whole history may revise each month; the file holds all of it
+max_age_days = 105  # provisional: set from the measured publication lag before the PR
 
 # ---- B. Funding & carry inputs -----------------------------------------------
 [[series]]

@@ -25,13 +25,13 @@ Fetcher = Callable[[Ctx], list[Observation]]
 
 
 def fetchers() -> dict[str, Fetcher]:
-    from .sources import (bea_ita, bea_release, boc, boe, boj, cboe, census, cftc, ecb, fred, mas,
-                          nyfed, rba, snb, treasury)
+    from .sources import (bea_ita, bea_release, boc, boe, boj, cboe, census, cftc, ecb, fed_gz, fred,
+                          mas, nyfed, rba, snb, treasury)
     return {"fred": fred.fetch, "treasury": treasury.fetch, "nyfed": nyfed.fetch,
             "ecb": ecb.fetch, "snb": snb.fetch, "boj": boj.fetch, "rba": rba.fetch,
             "mas": mas.fetch, "cboe": cboe.fetch, "cftc": cftc.fetch,
             "boc": boc.fetch, "boe": boe.fetch, "bea_release": bea_release.fetch,
-            "census": census.fetch, "bea": bea_ita.fetch}
+            "census": census.fetch, "bea": bea_ita.fetch, "fed_gz": fed_gz.fetch}
 
 
 def collect(reg: Registry, uses: str, http: Http, since: date | dict[str, date],
