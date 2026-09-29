@@ -85,7 +85,7 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     out.append(("credit:fedterms", "https://www.federalreserve.gov/disclaimer.htm"))
     out.append(("credit:gznote", "https://www.federalreserve.gov/econres/notes/feds-notes/updating-the-recession-risk-and-the-excess-bond-premium-20161006.html"))
     out.append(("credit:cdx", "https://web.archive.org/cdx/search/cdx?url=federalreserve.gov/econres/notes/feds-notes/ebp_csv.csv"
-                "&output=json&collapse=digest&from=2023"))
+                "&output=json&collapse=digest&from=2024&limit=200"))
     # PR 8 plan: BEA ITA parameter values (names only) and a multi-area call;
     # Census partner codes and history depth
     bea_base = "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ResultFormat=JSON&ParameterName="
