@@ -455,7 +455,7 @@ TERMS = {"corra:terms": r"data|reproduc|licen|permission|commercial",
          "credit:fredpage:BAA10Y": r"copyright|Moody|permission|redistribut|licen|reproduc",
          "credit:fredpage:AAA10Y": r"copyright|Moody|permission|redistribut|licen|reproduc",
          "credit:fedterms": r"public|copyright|reproduc|permission|distribut|third",
-         "credit:gznote": r"data|update|download|monthly|copyright|Moody|ICE|Lehman|licen|restrict",
+         "credit:gznote": r"business day|blackout|posted|schedule|each month|monthly|as soon as",
          "sonia:terms": r"licen|redistribut|attribut|Open Government|free",
          "sonia:legal": r"licen|Open Government|reproduc|database|statistic",
          "sonia:dbterms": r"licen|redistribut|attribut|Open Government|free"}
@@ -836,7 +836,7 @@ def main() -> int:
                 dates = [l.split(",")[0].strip() for l in snap.decode("utf-8-sig", "replace").splitlines()[1:] if l.strip()]
                 details.append(f"  snapshot {ts[:8]}: latest {dates[-1] if dates else '?'}")
         if label in TERMS and body:
-            details.append(f"- {label} terms excerpts:\n    {sentences(body, TERMS[label])}")
+            details.append(f"- {label} terms excerpts:\n    {sentences(body, TERMS[label], 30)}")
         if label == "corra:full" and body:
             details.append(f"- corra:full dates: {csv_dates(body[body.find(b'date,'):] if b'date,' in body else body)}")
         if label == "sonia:full" and body:
