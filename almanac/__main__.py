@@ -16,7 +16,7 @@ from pathlib import Path
 from . import deliver
 from .bundle import write_macro_bundle
 from .http import Http
-from .registry import load
+from .registry import key_of, keys, load
 from .run import collect
 
 
@@ -86,10 +86,20 @@ def _rows_by_series(parquet: Path, max_ids: int = 40) -> dict[str, int]:
         reg_id = next((i for i in ids if sid == i or sid.startswith(i + "_")), sid)
         out[reg_id] = out.get(reg_id, 0) + n
         members.setdefault(reg_id, []).append(sid)
-    # small series (up to 3 ids) are also listed per id
+    # small series (up to 3 ids) are also listed per id; larger series with
+    # `measures` per registry key, with the range of rows per id
+    series = {s["id"]: s for s in load().series}
     for reg_id, sids in members.items():
-        if reg_id not in per_id and len(sids) <= 3:
+        if reg_id in per_id:
+            continue
+        if len(sids) <= 3:
             out.update({sid: per_id[sid] for sid in sids})
+        elif "measures" in series.get(reg_id, {}):
+            for k in keys(series[reg_id]):
+                ks = [sid for sid in sids if key_of(series[reg_id], sid) == k]
+                if ks:
+                    n = [per_id[sid] for sid in ks]
+                    out[f"{reg_id}_{k}* ({len(ks)} ids, {min(n)}-{max(n)} each)"] = sum(n)
     return out
 
 
