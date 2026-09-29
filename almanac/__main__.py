@@ -77,10 +77,19 @@ def _rows_by_series(parquet: Path, max_ids: int = 40) -> dict[str, int]:
         ids: list[str] = []
     else:
         ids = sorted((s["id"] for s in load().series), key=len, reverse=True)
-    out: dict[str, int] = {}
+    per_id: dict[str, int] = {}
     for sid in delivered:
+        per_id[sid] = per_id.get(sid, 0) + 1
+    out: dict[str, int] = {}
+    members: dict[str, list[str]] = {}
+    for sid, n in per_id.items():
         reg_id = next((i for i in ids if sid == i or sid.startswith(i + "_")), sid)
-        out[reg_id] = out.get(reg_id, 0) + 1
+        out[reg_id] = out.get(reg_id, 0) + n
+        members.setdefault(reg_id, []).append(sid)
+    # small series (up to 3 ids) are also listed per id
+    for reg_id, sids in members.items():
+        if reg_id not in per_id and len(sids) <= 3:
+            out.update({sid: per_id[sid] for sid in sids})
     return out
 
 

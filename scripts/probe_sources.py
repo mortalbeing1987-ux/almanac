@@ -75,6 +75,17 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     # full-history FRED files for the weekly / lagged series (cosd from 1900)
     for k in ("NFCI", "ICSA", "DTWEXBGS", "T10Y3M"):
         out.append((f"fredfull:{k}", reg["sources"]["fred"]["url"].format(key=k, **dict(fmt, since="1900-01-01"))))
+    # Credit spreads: Moody's seasoned yields minus 10y (FRED) and the Fed's
+    # Gilchrist-Zakrajsek file; terms pages (text excerpts only)
+    for k in ("BAA10Y", "AAA10Y"):
+        out.append((f"fredfull:{k}", reg["sources"]["fred"]["url"].format(key=k, **dict(fmt, since="1900-01-01"))))
+        out.append((f"credit:fredpage:{k}", f"https://fred.stlouisfed.org/series/{k}"))
+    gz = "https://www.federalreserve.gov/econres/notes/feds-notes/ebp_csv.csv"
+    out.append(("credit:gz", gz))
+    out.append(("credit:fedterms", "https://www.federalreserve.gov/disclaimer.htm"))
+    out.append(("credit:gznote", "https://www.federalreserve.gov/econres/notes/feds-notes/updating-the-recession-risk-and-the-excess-bond-premium-20161006.html"))
+    out.append(("credit:cdx", "https://web.archive.org/cdx/search/cdx?url=federalreserve.gov/econres/notes/feds-notes/ebp_csv.csv"
+                "&output=json&collapse=digest&from=2024&limit=200"))
     # PR 8 plan: BEA ITA parameter values (names only) and a multi-area call;
     # Census partner codes and history depth
     bea_base = "https://apps.bea.gov/api/data?method=GetParameterValues&DataSetName=ITA&ResultFormat=JSON&ParameterName="
@@ -347,7 +358,7 @@ def list_values(body: bytes, field: str, pattern: str) -> str:
 SHAPE = {"cftc", "snb:snbgwdchfsgw", "corra:csv", "corra:json", "sonia:csv"}
 # Latest and earliest observation DATES only (first CSV column), to measure
 # publication lag and history depth. Dates are not values.
-DATE_SPAN = {"fredfull:CPIAUCSL", "fredfull:CPIAUCNS", "fredfull:CPILFESL", "fredfull:UNRATE",
+DATE_SPAN = {"fredfull:BAA10Y", "fredfull:AAA10Y", "fredfull:CPIAUCSL", "fredfull:CPIAUCNS", "fredfull:CPILFESL", "fredfull:UNRATE",
              "fredfull:PAYEMS"}
 
 
@@ -441,6 +452,10 @@ def snb_codes(body: bytes) -> str:
 
 # Terms pages: sentences mentioning these words (legal text, not data).
 TERMS = {"corra:terms": r"data|reproduc|licen|permission|commercial",
+         "credit:fredpage:BAA10Y": r"copyright|Moody|permission|redistribut|licen|reproduc",
+         "credit:fredpage:AAA10Y": r"copyright|Moody|permission|redistribut|licen|reproduc",
+         "credit:fedterms": r"public|copyright|reproduc|permission|distribut|third",
+         "credit:gznote": r"business day|blackout|posted|schedule|each month|monthly|as soon as",
          "sonia:terms": r"licen|redistribut|attribut|Open Government|free",
          "sonia:legal": r"licen|Open Government|reproduc|database|statistic",
          "sonia:dbterms": r"licen|redistribut|attribut|Open Government|free"}
@@ -519,6 +534,22 @@ def csv_dates(body: bytes) -> str:
     """First column date span of a CSV with any date format (SONIA IADB: 02 Jan 1997)."""
     rows = [l.split(",")[0].strip().strip('"') for l in body.decode("utf-8-sig", "replace").splitlines()[1:] if l.strip()]
     return f"{len(rows)} rows, first {rows[0]}, last {rows[-1]}" if rows else "no rows"
+
+
+def gz_layout(body: bytes) -> str:
+    """Header, masked first/last rows, date span (M/D/YYYY)."""
+    lines = [l for l in body.decode("utf-8-sig", "replace").splitlines() if l.strip()]
+    dates = [l.split(",")[0].strip() for l in lines[1:]]
+    return (f"header {lines[0]!r}; {len(lines) - 1} rows; first row {mask(lines[1])!r}; "
+            f"last row {mask(lines[-1])!r}; dates {dates[0]}..{dates[-1]}") if len(lines) > 1 else "no rows"
+
+
+def gz_history(cdx: bytes) -> list[tuple[str, str]]:
+    """(snapshot timestamp, archived URL) of each change of the CSV."""
+    rows = json.loads(cdx)
+    head = rows[0]
+    ti, oi, si = head.index("timestamp"), head.index("original"), head.index("statuscode")
+    return [(r[ti], f"https://web.archive.org/web/{r[ti]}id_/{r[oi]}") for r in rows[1:] if r[si] == "200"]
 
 
 def release_ages(dates: list) -> str:
@@ -619,6 +650,15 @@ def auth(src: dict) -> tuple[dict[str, str], dict[str, str]] | None:
     return {src["auth_header"]: key}, {}
 
 
+def last_modified(url: str) -> str:
+    try:
+        req = urllib.request.Request(url, method="HEAD", headers={"User-Agent": UA})
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return r.headers.get("Last-Modified", "none")
+    except Exception as e:
+        return f"ERR {type(e).__name__}"
+
+
 def probe(url: str, marker: str = "", headers: dict[str, str] | None = None,
           params: dict[str, str] | None = None) -> tuple[tuple[str, ...], bytes]:
     """(table cells, body). The body is only inspected, never printed."""
@@ -664,7 +704,7 @@ def main() -> int:
             src = {}
         if label.startswith("census:") and not label.startswith(("census:partners", "census:span", "census:multi", "census:eacheck")):
             src = {}
-        if label.startswith("beahist"):
+        if label.startswith(("beahist", "credit:")):
             src = {}
         if label.startswith("beameta"):
             src = reg["sources"]["bea"]
@@ -779,8 +819,24 @@ def main() -> int:
                 details.append(f"- census KR exports months: {len(t)}, {min(t)}..{max(t)}")
             except (ValueError, IndexError, TypeError):
                 details.append(f"- census span: not a table ({body[:80]!r})")
+        if label == "credit:gz":
+            details.append(f"- credit:gz Last-Modified: {last_modified(url)}")
+            if body:
+                details.append(f"- credit:gz layout: {gz_layout(body)}")
+        if label == "credit:cdx" and body:
+            try:
+                hist = gz_history(body)
+            except (ValueError, IndexError) as e:
+                hist = []
+                details.append(f"- credit:cdx: {type(e).__name__}")
+            details.append(f"- credit:cdx: {len(hist)} changed snapshots since 2023")
+            for ts, arch in hist[-24:]:
+                time.sleep(1)
+                _, snap = probe(arch)
+                dates = [l.split(",")[0].strip() for l in snap.decode("utf-8-sig", "replace").splitlines()[1:] if l.strip()]
+                details.append(f"  snapshot {ts[:8]}: latest {dates[-1] if dates else '?'}")
         if label in TERMS and body:
-            details.append(f"- {label} terms excerpts:\n    {sentences(body, TERMS[label])}")
+            details.append(f"- {label} terms excerpts:\n    {sentences(body, TERMS[label], 30)}")
         if label == "corra:full" and body:
             details.append(f"- corra:full dates: {csv_dates(body[body.find(b'date,'):] if b'date,' in body else body)}")
         if label == "sonia:full" and body:
