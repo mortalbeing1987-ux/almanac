@@ -165,8 +165,10 @@ files = { time_series = 'trad\d{4}-time-series\.xlsx', geo = 'trad\d{4}-geo-time
 # the `key` query param. {flow} = exports | imports; {field} = ALL_VAL_MO
 # (exports, FAS value) | GEN_VAL_MO (general imports, customs value); one request
 # per flow returns every partner (repeated CTY_CODE, appended by the fetcher)
-# for every month from {month}. History from 2010-01 (probe 2026-09-28).
-url = "https://api.census.gov/data/timeseries/intltrade/{flow}/hs?get=CTY_CODE,CTY_NAME,{field}&time=from+{month}"
+# for every month from the start. History from 2010-01 (probe 2026-09-28).
+# {endpoint} = hs (partners, commodities) | naics (industries); {get}, {time}
+# and predicates are built by the fetcher (see sources/census.py).
+url = "https://api.census.gov/data/timeseries/intltrade/{flow}/{endpoint}?get={get}&time={time}"
 secret = "CENSUS_API_KEY"
 auth_param = "key"
 
