@@ -85,7 +85,7 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
         out.append((f"tradex:levels:{flow}", f"{base}/{flow}/naics?get=NAICS,NAICS_SDESC,COMM_LVL,{val[flow]}&time=2026-06&CTY_CODE=-"))
     for flow in ("exports", "imports"):
         # one calendar year per request (all months at once timed out at 45 s)
-        for y in (2002, 2009, 2010, 2013, 2025):
+        for y in (2013, 2025):
             out.append((f"tradex:y{y}:{flow}", f"{base}/{flow}/naics?get=NAICS,{val[flow]}&COMM_LVL=NA3&CTY_CODE=-"
                         f"&time=from+{y}-01+to+{y}-12"))
         out.append((f"tradex:na3:{flow}", f"{base}/{flow}/naics?get=NAICS,{val[flow]}&COMM_LVL=NA3&CTY_CODE=-"
@@ -789,7 +789,7 @@ def main() -> int:
             lines.append(f"| {label} | needs secret {src['secret']} (not set; not requested) | | | | | |")
             continue
         global TIMEOUT
-        TIMEOUT = 150 if label.startswith("tradex:") else 45
+        TIMEOUT = 110 if label.startswith("tradex:") else 45
         cells, body = probe(url, marker_for(label), *creds)
         lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
         if label in SHAPE and body:
@@ -916,9 +916,14 @@ def main() -> int:
                 h, rows = census_table(body)
                 if h:
                     t = sorted({r[h.index("time")] for r in rows})
-                    details.append(f"- {label}: header {h}; {len(rows)} rows; {len(body):,} bytes; months {len(t)}, {t[0]}..{t[-1]}")
+                    codes = sorted({r[h.index("NAICS")] for r in rows}) if "NAICS" in h else []
+                    details.append(f"- {label}: header {h}; {len(rows)} rows; {len(body):,} bytes; {cells[5]}; "
+                                   f"months {len(t)}, {t[0]}..{t[-1]}" + (f"; NAICS {len(codes)}: {' '.join(codes)}" if codes else ""))
                 else:
                     details.append(f"- {label}: not a table {body[:120]!r}")
+            else:
+                details.append(f"- {label}: {cells[0]} after {cells[5]}")
+            print(details[-1], flush=True)
         if label == "credit:gz":
             details.append(f"- credit:gz Last-Modified: {last_modified(url)}")
             if body:
