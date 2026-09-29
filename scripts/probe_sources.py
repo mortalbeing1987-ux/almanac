@@ -84,7 +84,12 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     for flow in ("exports", "imports"):
         out.append((f"tradex:levels:{flow}", f"{base}/{flow}/naics?get=NAICS,NAICS_SDESC,COMM_LVL,{val[flow]}&time=2026-06&CTY_CODE=-"))
     for flow in ("exports", "imports"):
-        out.append((f"tradex:na3:{flow}", f"{base}/{flow}/naics?get=NAICS,{val[flow]}&COMM_LVL=NA3&CTY_CODE=-&time=from+1990-01"))
+        # one calendar year per request (all months at once timed out at 45 s)
+        for y in (2002, 2009, 2010, 2013, 2025):
+            out.append((f"tradex:y{y}:{flow}", f"{base}/{flow}/naics?get=NAICS,{val[flow]}&COMM_LVL=NA3&CTY_CODE=-"
+                        f"&time=from+{y}-01+to+{y}-12"))
+        out.append((f"tradex:na3:{flow}", f"{base}/{flow}/naics?get=NAICS,{val[flow]}&COMM_LVL=NA3&CTY_CODE=-"
+                    f"&time=from+2026-01"))
         out.append((f"tradex:world:{flow}", f"{base}/{flow}/hs?get=CTY_CODE,{val[flow]}&CTY_CODE=-&CTY_CODE=4419&time=from+2024-01"))
     for flow, com in (("exports", "E_COMMODITY"), ("imports", "I_COMMODITY")):
         codes = "&".join(f"CTY_CODE={c}" for c in ("-", "0003", "0025", "6021", "1220", "4419", "5700", "4280", "4120",
@@ -587,16 +592,18 @@ def tradex_report(bodies: dict) -> list[str]:
         hg, grows = census_table(bodies.get(f"tradex:gold:{flow}", b""))
         if not hw or not hg:
             continue
-        months = sorted({r[hw.index("time")] for r in wrows})[-12:]
+        all_months = sorted({r[hw.index("time")] for r in wrows})
+        q_end = next(m for m in reversed(all_months) if m[5:] in ("03", "06", "09", "12"))
+        months = [m for m in all_months if m <= q_end][-12:]
         tot[flow] = sum(float(r[hw.index(val[flow])] or 0) for r in wrows
                         if r[hw.index("CTY_CODE")] == "4419" and r[hw.index("time")] in months)
         gold[flow] = sum(float(r[hg.index(val[flow])] or 0) for r in grows
                          if r[hg.index("CTY_CODE")] == "4419" and r[hg.index("time")] in months)
-        out.append(f"CH {flow} last 12 months {months[0]}..{months[-1]}: total ${tot[flow] / 1e9:.1f}B, "
+        out.append(f"CH {flow} last 4 quarters {months[0]}..{months[-1]}: total ${tot[flow] / 1e9:.1f}B, "
                    f"gold ${gold[flow] / 1e9:.1f}B ({100 * gold[flow] / tot[flow]:.0f}%)")
     if len(tot) == 2:
         bal, bal_ex = tot["exports"] - tot["imports"], (tot["exports"] - gold["exports"]) - (tot["imports"] - gold["imports"])
-        out.append(f"CH goods balance last 12 months: ${bal / 1e9:+.1f}B; ex-gold ${bal_ex / 1e9:+.1f}B")
+        out.append(f"CH goods balance last 4 quarters: ${bal / 1e9:+.1f}B; ex-gold ${bal_ex / 1e9:+.1f}B")
     return out
 
 
@@ -781,6 +788,8 @@ def main() -> int:
         if creds is None:
             lines.append(f"| {label} | needs secret {src['secret']} (not set; not requested) | | | | | |")
             continue
+        global TIMEOUT
+        TIMEOUT = 150 if label.startswith("tradex:") else 45
         cells, body = probe(url, marker_for(label), *creds)
         lines.append("| {} | {} | {} | {} | {} | {} | {} |".format(label, *cells))
         if label in SHAPE and body:
