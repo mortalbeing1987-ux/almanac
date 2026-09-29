@@ -75,6 +75,22 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     # full-history FRED files for the weekly / lagged series (cosd from 1900)
     for k in ("NFCI", "ICSA", "DTWEXBGS", "T10Y3M"):
         out.append((f"fredfull:{k}", reg["sources"]["fred"]["url"].format(key=k, **dict(fmt, since="1900-01-01"))))
+    # Trade detail: NAICS industries (world) and HS 7108 gold by partner (Census)
+    base = "https://api.census.gov/data/timeseries/intltrade"
+    for flow in ("exports", "imports"):
+        out.append((f"tradex:vars:{flow}", f"{base}/{flow}/naics/variables.json"))
+        out.append((f"tradex:vars:hs:{flow}", f"{base}/{flow}/hs/variables.json"))
+    val = {"exports": "ALL_VAL_MO", "imports": "GEN_VAL_MO"}
+    for flow in ("exports", "imports"):
+        out.append((f"tradex:levels:{flow}", f"{base}/{flow}/naics?get=NAICS,NAICS_SDESC,COMM_LVL,{val[flow]}&time=2026-06&CTY_CODE=-"))
+    for flow in ("exports", "imports"):
+        out.append((f"tradex:na3:{flow}", f"{base}/{flow}/naics?get=NAICS,{val[flow]}&COMM_LVL=NA3&CTY_CODE=-&time=from+1990-01"))
+        out.append((f"tradex:world:{flow}", f"{base}/{flow}/hs?get=CTY_CODE,{val[flow]}&CTY_CODE=-&CTY_CODE=4419&time=from+2024-01"))
+    for flow, com in (("exports", "E_COMMODITY"), ("imports", "I_COMMODITY")):
+        codes = "&".join(f"CTY_CODE={c}" for c in ("-", "0003", "0025", "6021", "1220", "4419", "5700", "4280", "4120",
+                                                    "5330", "5880", "5800", "2010", "5590", "5830", "5520"))
+        out.append((f"tradex:gold:{flow}", f"{base}/{flow}/hs?get=CTY_CODE,{val[flow]},{com}&{com}=7108&COMM_LVL=HS4"
+                    f"&time=from+2010-01&{codes}"))
     # Credit spreads: Moody's seasoned yields minus 10y (FRED) and the Fed's
     # Gilchrist-Zakrajsek file; terms pages (text excerpts only)
     for k in ("BAA10Y", "AAA10Y"):
@@ -536,6 +552,54 @@ def csv_dates(body: bytes) -> str:
     return f"{len(rows)} rows, first {rows[0]}, last {rows[-1]}" if rows else "no rows"
 
 
+def census_table(body: bytes):
+    try:
+        t = json.loads(body)
+        return t[0], t[1:]
+    except (ValueError, IndexError, TypeError):
+        return None, []
+
+
+def tradex_report(bodies: dict) -> list[str]:
+    """Derived checks only: industry-sum gap vs the world total per month, and
+    the Switzerland gold share / balance over the latest 12 months."""
+    out = []
+    val = {"exports": "ALL_VAL_MO", "imports": "GEN_VAL_MO"}
+    for flow in ("exports", "imports"):
+        h, rows = census_table(bodies.get(f"tradex:na3:{flow}", b""))
+        hw, wrows = census_table(bodies.get(f"tradex:world:{flow}", b""))
+        if not h or not hw:
+            out.append(f"{flow}: tables missing")
+            continue
+        vi, ti = h.index(val[flow]), h.index("time")
+        by = {}
+        for r in rows:
+            by[r[ti]] = by.get(r[ti], 0.0) + float(r[vi] or 0)
+        wv, wt, wc = hw.index(val[flow]), hw.index("time"), hw.index("CTY_CODE")
+        world = {r[wt]: float(r[wv] or 0) for r in wrows if r[wc] == "-"}
+        months = sorted(set(by) & set(world))[-8:]
+        out.append(f"{flow}: NA3 sum vs world total, gap %: " + ", ".join(
+            f"{m} {100 * (by[m] - world[m]) / world[m]:+.3f}" for m in months))
+    # Switzerland: total vs gold, latest 12 months
+    tot, gold = {}, {}
+    for flow in ("exports", "imports"):
+        hw, wrows = census_table(bodies.get(f"tradex:world:{flow}", b""))
+        hg, grows = census_table(bodies.get(f"tradex:gold:{flow}", b""))
+        if not hw or not hg:
+            continue
+        months = sorted({r[hw.index("time")] for r in wrows})[-12:]
+        tot[flow] = sum(float(r[hw.index(val[flow])] or 0) for r in wrows
+                        if r[hw.index("CTY_CODE")] == "4419" and r[hw.index("time")] in months)
+        gold[flow] = sum(float(r[hg.index(val[flow])] or 0) for r in grows
+                         if r[hg.index("CTY_CODE")] == "4419" and r[hg.index("time")] in months)
+        out.append(f"CH {flow} last 12 months {months[0]}..{months[-1]}: total ${tot[flow] / 1e9:.1f}B, "
+                   f"gold ${gold[flow] / 1e9:.1f}B ({100 * gold[flow] / tot[flow]:.0f}%)")
+    if len(tot) == 2:
+        bal, bal_ex = tot["exports"] - tot["imports"], (tot["exports"] - gold["exports"]) - (tot["imports"] - gold["imports"])
+        out.append(f"CH goods balance last 12 months: ${bal / 1e9:+.1f}B; ex-gold ${bal_ex / 1e9:+.1f}B")
+    return out
+
+
 def gz_layout(body: bytes) -> str:
     """Header, masked first/last rows, date span (M/D/YYYY)."""
     lines = [l for l in body.decode("utf-8-sig", "replace").splitlines() if l.strip()]
@@ -692,6 +756,7 @@ def main() -> int:
     details: list[str] = []
     only = [p for p in os.environ.get("PROBE_ONLY", "").split(",") if p]
     release_dates: dict[str, list] = {}
+    tradex: dict[str, bytes] = {}
     for label, url in probe_urls(reg):
         if only and not any(label.startswith(p) for p in only):
             continue
@@ -702,6 +767,8 @@ def main() -> int:
                                  .replace("cftczip", "cftc").replace("fredcal", "fred"), {})
         if label.startswith(("corra", "sonia")):
             src = {}
+        if label.startswith("tradex:"):
+            src = reg["sources"]["census"]
         if label.startswith("census:") and not label.startswith(("census:partners", "census:span", "census:multi", "census:eacheck")):
             src = {}
         if label.startswith(("beahist", "credit:")):
@@ -819,6 +886,30 @@ def main() -> int:
                 details.append(f"- census KR exports months: {len(t)}, {min(t)}..{max(t)}")
             except (ValueError, IndexError, TypeError):
                 details.append(f"- census span: not a table ({body[:80]!r})")
+        if label.startswith("tradex:"):
+            tradex[label] = body
+            if label.startswith("tradex:vars") and body:
+                try:
+                    names = sorted(json.loads(body)["variables"])
+                    details.append(f"- {label}: {', '.join(names)[:1500]}")
+                except (ValueError, KeyError):
+                    details.append(f"- {label}: not the variables document")
+            elif label.startswith("tradex:levels") and body:
+                h, rows = census_table(body)
+                if h:
+                    li, ni, di = h.index("COMM_LVL"), h.index("NAICS"), h.index("NAICS_SDESC")
+                    levels = sorted({r[li] for r in rows})
+                    na3 = sorted({(r[ni], r[di]) for r in rows if r[li] == "NA3"})
+                    details.append(f"- {label}: levels {levels}; NA3 {len(na3)} codes: " + "; ".join(f"{c} {d}" for c, d in na3))
+                else:
+                    details.append(f"- {label}: {cells[0]} not a table {body[:120]!r}")
+            elif body:
+                h, rows = census_table(body)
+                if h:
+                    t = sorted({r[h.index("time")] for r in rows})
+                    details.append(f"- {label}: header {h}; {len(rows)} rows; {len(body):,} bytes; months {len(t)}, {t[0]}..{t[-1]}")
+                else:
+                    details.append(f"- {label}: not a table {body[:120]!r}")
         if label == "credit:gz":
             details.append(f"- credit:gz Last-Modified: {last_modified(url)}")
             if body:
@@ -856,6 +947,8 @@ def main() -> int:
         if label in LISTS:
             details.append(f"- {label}: {list_values(body, *LISTS[label])}")
         time.sleep(1)  # one request at a time, politely
+    if tradex:
+        details += [f"- tradex check: {line}" for line in tradex_report(tradex)]
     for rid, ds in sorted(release_dates.items()):
         details.append(f"- release {rid} ages: {release_ages(ds)}")
     table = "\n".join(lines)
