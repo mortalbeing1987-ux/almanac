@@ -43,7 +43,7 @@ def test_no_source_key_listed_twice():
         keys = s["key"] if isinstance(s["key"], list) else [s["key"]]
         for k in keys:
             sheet = s.get("sheets", {}).get(k, s.get("sheet"))
-            ident = (s["source"], s.get("file"), sheet, s.get("column"), k)
+            ident = (s["source"], s.get("file"), sheet, s.get("column"), s.get("endpoint"), s.get("commodity"), k)
             assert ident not in seen, (s["id"], k)
             seen.add(ident)
 

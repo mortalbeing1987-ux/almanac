@@ -8,9 +8,8 @@ Three kinds of series share the source (one host, one key):
   - one commodity by partner (TRADE_CEN_GOLD, HS 7108): the same plus
     COMM_LVL=HS4 and <E|I>_COMMODITY=<code>. Census omits partner-months with
     no trade, so a month present in the reply but missing for a partner is 0;
-  - world by industry (TRADE_CEN_NAICS): `naics` endpoint, COMM_LVL=NA3,
-    CTY_CODE=- (world). A multi-year request timed out (probe 2026-09-29), so
-    it is one request per flow per calendar year.
+  - world by industry (TRADE_CEN_NAICS): `naics` endpoint, CTY_CODE=- (world),
+    one request per flow per industry (NAICS=<code>); see _by_industry.
 The reply is a JSON table: a header row, then one row per (key, month);
 predicates are echoed as extra columns. The key goes only into the request
 (`key` query parameter) and is never part of an error message.
@@ -83,19 +82,26 @@ def _by_partner(ctx, s: dict, key: str, start: str) -> list[Observation]:
 
 
 def _by_industry(ctx, s: dict, key: str, start: str) -> list[Observation]:
+    """One request per industry: `NAICS=<code>&CTY_CODE=-` answers the whole
+    history in under a second, while any COMM_LVL-filtered exports query
+    timed out at 110 s even for one month (probe 2026-09-29). A month the flow
+    publishes (seen for any industry) but that is missing for an industry after
+    its first appearance is 0: Census omits code-months with no trade."""
     flow = s["flows"][key]
     ids = dict(zip(s["measures"], delivered_ids(s, key)))
-    preds = [("COMM_LVL", s["level"]), ("CTY_CODE", "-")]
-    first = max(int(start[:4]), int(s["first_month"][:4]))
+    got: dict[str, list[tuple[str, float]]] = {}
+    for code in s["measures"]:
+        url = _url(ctx, flow, "naics", f"NAICS,{flow['field']}", f"from+{start}", [("NAICS", code), ("CTY_CODE", "-")])
+        rows = parse(get(ctx, url), flow["field"], by="NAICS")
+        require(all(c == code for c, _, _ in rows), f"Census NAICS reply only for {code}")
+        got[code] = [(d, v) for _, d, v in rows]
+    published = {d for rows in got.values() for d, _ in rows}
     obs = []
-    for year in range(first, ctx.today.year + 1):
-        time = f"from+{year}-01+to+{year}-12"
-        got = parse(get(ctx, _url(ctx, flow, "naics", f"NAICS,{flow['field']}", time, preds)),
-                    flow["field"], by="NAICS")
-        require(all(d[:4] == str(year) for _, d, _ in got), f"Census NAICS reply within {year}")
-        unknown = sorted({c for c, _, _ in got} - set(ids))
-        require(not unknown, f"Census NAICS codes not in the registry: {unknown[:5]}")
-        obs += [Observation(ids[c], d, v, ctx.source) for c, d, v in got if d >= f"{start}-01"]
+    for code, rows in got.items():
+        have = {d for d, _ in rows}
+        first = min(have, default=None)
+        rows += [(d, 0.0) for d in published if first and d > first and d not in have]
+        obs += [Observation(ids[code], d, v, ctx.source) for d, v in rows]
     return obs
 
 

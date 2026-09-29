@@ -50,6 +50,26 @@ def census_reply(field, months=("2026-06", "2026-07"), drop=()):
     return json.dumps(rows).encode()
 
 
+def naics_reply(url, months=("2026-06", "2026-07")):
+    """exports|imports/naics?get=NAICS,<field>&NAICS=<code>&CTY_CODE=- in the real layout."""
+    field = "ALL_VAL_MO" if "/exports/" in url else "GEN_VAL_MO"
+    code = url.split("&NAICS=")[1].split("&")[0]
+    rows = [["NAICS", field, "NAICS", "CTY_CODE", "time"]]
+    rows += [[code, str(int(tf.value("naics", field, code, m) * 1000)), code, "-", m] for m in months]
+    return json.dumps(rows).encode()
+
+
+def gold_reply(field, months=("2026-06", "2026-07"), skip=(("VN", "2026-07"),)):
+    """hs?get=CTY_CODE,<field>,<E|I>_COMMODITY&COMM_LVL=HS4&<E|I>_COMMODITY=7108&CTY_CODE=..."""
+    com = "E_COMMODITY" if field == "ALL_VAL_MO" else "I_COMMODITY"
+    rows = [["CTY_CODE", field, com, com, "COMM_LVL", "time", "CTY_CODE"]]
+    for p, code in CEN_CODES.items():
+        for m in months:
+            if (p, m) not in skip:
+                rows.append([code, str(int(tf.value("gold", field, p, m) * 1000)), "7108", "7108", "HS4", m, code])
+    return json.dumps(rows).encode()
+
+
 def ita_reply(indicator, years=(2025, 2026), shift=None):
     data = []
     t = {"ExpGds": 4, "ImpGds": 5, "ExpServ": 7, "ImpServ": 8}[indicator]
@@ -84,6 +104,10 @@ class Web:
             return self.geo
         if url.endswith("-time-series.xlsx"):
             return self.ts
+        if "api.census.gov" in url and "/naics?" in url:
+            return naics_reply(url)
+        if "api.census.gov" in url and "_COMMODITY=7108" in url:
+            return gold_reply("ALL_VAL_MO" if "/exports/" in url else "GEN_VAL_MO")
         if "api.census.gov" in url:
             return census_reply("ALL_VAL_MO" if "/exports/" in url else "GEN_VAL_MO")
         if "apps.bea.gov" in url:
@@ -283,12 +307,12 @@ def g_run(tmp_path, web, monkeypatch, now=NOW):
     return deliver.run(REG, tmp_path, "G", web, now)
 
 
-def test_g_pass_delivers_189_ids_crosschecks_ok_and_second_pass_is_empty(tmp_path, monkeypatch):
+def test_g_pass_delivers_285_ids_crosschecks_ok_and_second_pass_is_empty(tmp_path, monkeypatch):
     web = Web()
     first = g_run(tmp_path, web, monkeypatch)
     assert {k: v["status"] for k, v in first["sources"].items()} == {"bea_release": "ok", "census": "ok"}
     delivered = set(first["freshness"]["series"])
-    assert len(delivered) == 189
+    assert len(delivered) == 189 + 32 + 64  # + gold by partner, + world by industry
     x = first["crosschecks"]
     assert x["TRADE_TOTAL_XCHECK"]["status"] == "ok" and x["TRADE_TOTAL_XCHECK"]["compared"] == 4 * 2  # window: 1100 days
     assert x["TRADE_ITA_XCHECK"]["status"] == "ok" and x["TRADE_ITA_XCHECK"]["compared"] == 4 * 14 * 2

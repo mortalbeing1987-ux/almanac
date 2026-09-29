@@ -733,6 +733,87 @@ backfill = "full"
 lookback_days = 1300  # June recompiles the prior three years
 max_age_days = 105
 
+[[series]]
+id = "TRADE_CEN_GOLD"
+source = "census"
+# Non-monetary gold (HS 7108) by partner, monthly NSA from 2010-01, so bilateral
+# balances (Switzerland above all) can be read ex-gold: TRADE_CEN_GOLD_<EXP|IMP>_<partner>.
+# Probe 2026-09-29, last 4 quarters (Jul 2025-Jun 2026): US goods exports to CH
+# $86.4B of which gold $66.8B (77%); imports $53.8B, gold $8.1B; balance
+# +$32.6B, ex-gold -$26.2B. Census omits partner-months with no gold trade: a
+# month published for any partner but missing for one is delivered as 0.
+key = ["EXP", "IMP"]
+commodity = "7108"
+flows = { EXP = { flow = "exports", field = "ALL_VAL_MO", commodity = "E_COMMODITY" }, IMP = { flow = "imports", field = "GEN_VAL_MO", commodity = "I_COMMODITY" } }
+measures = ["WORLD", "EU", "EA", "AU", "CA", "CH", "CN", "DE", "GB", "IN", "JP", "KR", "MX", "SG", "TW", "VN"]
+partners = { WORLD = "-", EU = "0003", EA = "0025", AU = "6021", CA = "1220", CH = "4419", CN = "5700", DE = "4280", GB = "4120", IN = "5330", JP = "5880", KR = "5800", MX = "2010", SG = "5590", TW = "5830", VN = "5520" }
+freq = "monthly"
+units = "USD (dollars, not millions), not seasonally adjusted; HS 7108 gold, Census basis; exports FAS value, general imports customs value"
+use = "G"
+status = "active"
+redistribution = "open"
+backfill = "full"
+lookback_days = 1300  # June recompiles the prior three years
+max_age_days = 105
+
+[[series]]
+id = "TRADE_CEN_NAICS"
+source = "census"
+endpoint = "naics"
+# US total (world) goods trade by 3-digit NAICS industry, monthly NSA from
+# 2013-01 (probe 2026-09-29): TRADE_CEN_NAICS_<EXP|IMP>_<code>. One request per
+# flow per industry: any COMM_LVL=NA3 exports query timed out at 110 s, while
+# NAICS=<code>&CTY_CODE=- returns the whole history in <1 s. The 32 NA3 codes
+# sum to the world total (imports: 0.000% gap, Jan-Jul 2026). Codes appear
+# later than 2013 in some flows (115); an industry"s published months after
+# its first appearance that are missing are delivered as 0.
+key = ["EXP", "IMP"]
+flows = { EXP = { flow = "exports", field = "ALL_VAL_MO" }, IMP = { flow = "imports", field = "GEN_VAL_MO" } }
+first_month = "2013-01"
+measures = ["111", "112", "113", "114", "115", "211", "212", "311", "312", "313", "314", "315", "316", "321", "322", "323", "324", "325", "326", "327", "331", "332", "333", "334", "335", "336", "337", "339", "910", "930", "980", "990"]
+freq = "monthly"
+units = "USD (dollars, not millions), not seasonally adjusted; goods, Census basis, world total; exports FAS value, general imports customs value"
+use = "G"
+status = "active"
+redistribution = "open"
+backfill = "full"
+lookback_days = 1300
+max_age_days = 105
+
+[series.names]  # NAICS_SDESC per code (belongs to TRADE_CEN_NAICS above)
+"111" = "AGRICULTURAL PRODUCTS"
+"112" = "LIVESTOCK & LIVESTOCK PRODUCTS"
+"113" = "FORESTRY PRODUCTS, NESOI"
+"114" = "FISH, FRESH/CHILLED/FROZEN & OTHER MARINE PRODUCTS"
+"115" = "PRODUCTS SUPPORTING AGRICULTURE AND FORESTRY"
+"211" = "OIL & GAS"
+"212" = "MINERALS & ORES"
+"311" = "FOOD & KINDRED PRODUCTS"
+"312" = "BEVERAGES & TOBACCO PRODUCTS"
+"313" = "TEXTILES & FABRICS"
+"314" = "TEXTILE MILL PRODUCTS"
+"315" = "APPAREL & ACCESSORIES"
+"316" = "LEATHER & ALLIED PRODUCTS"
+"321" = "WOOD PRODUCTS"
+"322" = "PAPER"
+"323" = "PRINTED MATTER AND RELATED PRODUCTS, NESOI"
+"324" = "PETROLEUM & COAL PRODUCTS"
+"325" = "CHEMICALS"
+"326" = "PLASTICS & RUBBER PRODUCTS"
+"327" = "NONMETALLIC MINERAL PRODUCTS"
+"331" = "PRIMARY METAL MFG"
+"332" = "FABRICATED METAL PRODUCTS, NESOI"
+"333" = "MACHINERY, EXCEPT ELECTRICAL"
+"334" = "COMPUTER & ELECTRONIC PRODUCTS"
+"335" = "ELECTRICAL EQUIPMENT, APPLIANCES & COMPONENTS"
+"336" = "TRANSPORTATION EQUIPMENT"
+"337" = "FURNITURE & FIXTURES"
+"339" = "MISCELLANEOUS MANUFACTURED COMMODITIES"
+"910" = "WASTE AND SCRAP"
+"930" = "USED OR SECOND-HAND MERCHANDISE"
+"980" = "GOODS RETURNED (EXPORTS FOR CANADA ONLY)"
+"990" = "OTHER SPECIAL CLASSIFICATION PROVISIONS"
+
 # ---- G cross-checks (fetched and compared, never delivered) --------------------
 # Results go to status.json `crosschecks` (ids and dates only); a mismatch is a
 # warning, never a block.

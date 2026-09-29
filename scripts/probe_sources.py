@@ -83,6 +83,12 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     val = {"exports": "ALL_VAL_MO", "imports": "GEN_VAL_MO"}
     for flow in ("exports", "imports"):
         out.append((f"tradex:levels:{flow}", f"{base}/{flow}/naics?get=NAICS,NAICS_SDESC,COMM_LVL,{val[flow]}&time=2026-06&CTY_CODE=-"))
+    # per-industry requests (fast) for the industry-sum check
+    naics_codes = next(x for x in reg["series"] if x["id"] == "TRADE_CEN_NAICS")["measures"]
+    for flow in ("exports", "imports"):
+        for code in naics_codes:
+            out.append((f"tradex:code:{flow}:{code}", f"{base}/{flow}/naics?get=NAICS,{val[flow]}&time=from+2025-07"
+                        f"&NAICS={code}&CTY_CODE=-"))
     # exports/naics variants (yearly and 2026 requests timed out at 110 s)
     ex = f"{base}/exports/naics?get=NAICS,ALL_VAL_MO"
     out.append(("tradex:xv:month", f"{ex}&COMM_LVL=NA3&CTY_CODE=-&time=2026-06"))
@@ -579,19 +585,23 @@ def tradex_report(bodies: dict) -> list[str]:
     out = []
     val = {"exports": "ALL_VAL_MO", "imports": "GEN_VAL_MO"}
     for flow in ("exports", "imports"):
-        h, rows = census_table(bodies.get(f"tradex:na3:{flow}", b""))
         hw, wrows = census_table(bodies.get(f"tradex:world:{flow}", b""))
-        if not h or not hw:
+        by: dict[str, float] = {}
+        n_codes = 0
+        for label, body in bodies.items():
+            if label.startswith(f"tradex:code:{flow}:"):
+                h, rows = census_table(body)
+                if h:
+                    n_codes += 1
+                    for r in rows:
+                        by[r[h.index("time")]] = by.get(r[h.index("time")], 0.0) + float(r[h.index(val[flow])] or 0)
+        if not by or not hw:
             out.append(f"{flow}: tables missing")
             continue
-        vi, ti = h.index(val[flow]), h.index("time")
-        by = {}
-        for r in rows:
-            by[r[ti]] = by.get(r[ti], 0.0) + float(r[vi] or 0)
         wv, wt, wc = hw.index(val[flow]), hw.index("time"), hw.index("CTY_CODE")
         world = {r[wt]: float(r[wv] or 0) for r in wrows if r[wc] == "-"}
         months = sorted(set(by) & set(world))[-8:]
-        out.append(f"{flow}: NA3 sum vs world total, gap %: " + ", ".join(
+        out.append(f"{flow}: sum of {n_codes} NA3 industries vs world total, gap %: " + ", ".join(
             f"{m} {100 * (by[m] - world[m]) / world[m]:+.3f}" for m in months))
     # Switzerland: total vs gold, latest 12 months
     tot, gold = {}, {}
@@ -932,6 +942,8 @@ def main() -> int:
             else:
                 details.append(f"- {label}: {cells[0]} after {cells[5]}")
             print(details[-1], flush=True)
+            if label.startswith("tradex:code:"):
+                details.pop()
         if label == "credit:gz":
             details.append(f"- credit:gz Last-Modified: {last_modified(url)}")
             if body:
