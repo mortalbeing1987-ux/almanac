@@ -83,6 +83,14 @@ def probe_urls(reg: dict) -> list[tuple[str, str]]:
     val = {"exports": "ALL_VAL_MO", "imports": "GEN_VAL_MO"}
     for flow in ("exports", "imports"):
         out.append((f"tradex:levels:{flow}", f"{base}/{flow}/naics?get=NAICS,NAICS_SDESC,COMM_LVL,{val[flow]}&time=2026-06&CTY_CODE=-"))
+    # exports/naics variants (yearly and 2026 requests timed out at 110 s)
+    ex = f"{base}/exports/naics?get=NAICS,ALL_VAL_MO"
+    out.append(("tradex:xv:month", f"{ex}&COMM_LVL=NA3&CTY_CODE=-&time=2026-06"))
+    out.append(("tradex:xv:df1", f"{ex}&COMM_LVL=NA3&CTY_CODE=-&DF=1&time=2026-06"))
+    out.append(("tradex:xv:one", f"{ex}&NAICS=325&CTY_CODE=-&time=from+2013-01"))
+    out.append(("tradex:xv:nocty", f"{ex}&COMM_LVL=NA3&time=2026-06&CTY_CODE=1220"))
+    out.append(("tradex:xv:2010", f"{ex}&COMM_LVL=NA3&CTY_CODE=-&time=2010-01"))
+    out.append(("tradex:xv:2008", f"{ex}&COMM_LVL=NA3&CTY_CODE=-&time=2008-01"))
     for flow in ("exports", "imports"):
         # one calendar year per request (all months at once timed out at 45 s)
         for y in (2013, 2025):
@@ -914,13 +922,13 @@ def main() -> int:
                     details.append(f"- {label}: {cells[0]} not a table {body[:120]!r}")
             elif body:
                 h, rows = census_table(body)
-                if h:
+                if h and rows:
                     t = sorted({r[h.index("time")] for r in rows})
                     codes = sorted({r[h.index("NAICS")] for r in rows}) if "NAICS" in h else []
                     details.append(f"- {label}: header {h}; {len(rows)} rows; {len(body):,} bytes; {cells[5]}; "
                                    f"months {len(t)}, {t[0]}..{t[-1]}" + (f"; NAICS {len(codes)}: {' '.join(codes)}" if codes else ""))
                 else:
-                    details.append(f"- {label}: not a table {body[:120]!r}")
+                    details.append(f"- {label}: {cells[0]} no rows / not a table {body[:120]!r} after {cells[5]}")
             else:
                 details.append(f"- {label}: {cells[0]} after {cells[5]}")
             print(details[-1], flush=True)
