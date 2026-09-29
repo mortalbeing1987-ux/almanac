@@ -245,7 +245,13 @@ status = "active"
 redistribution = "open"  # Federal Reserve Board: public domain (see [sources.fed_gz])
 backfill = "full"
 lookback_days = 20000  # the whole history may revise each month; the file holds all of it
-max_age_days = 105  # provisional: set from the measured publication lag before the PR
+# Posting schedule (FEDS Note, probe 2026-09-29): "on the fourth business day
+# of each month", after the FOMC blackout when it falls inside one. The file's
+# Last-Modified (Thu 6 Aug 2026, July data) matches: the 4th business day. So a
+# month dated M-01 is superseded on the 4th business day of M+2: at most 68
+# days, plus up to ~11 for a blackout -> 80. As of 2026-09-29 the August value
+# (due 4 Sep) is not posted, so the series is genuinely late (90 days).
+max_age_days = 80
 
 # ---- B. Funding & carry inputs -----------------------------------------------
 [[series]]
