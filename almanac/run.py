@@ -25,11 +25,11 @@ Fetcher = Callable[[Ctx], list[Observation]]
 
 
 def fetchers() -> dict[str, Fetcher]:
-    from .sources import (bea_ita, bea_release, boc, boe, boj, cboe, census, cftc, ecb, fed_gz, fred,
+    from .sources import (bea_ita, bea_release, boc, boe, boj, cboe, cboe_pc, census, cftc, ecb, fed_gz, fred,
                           mas, nyfed, rba, snb, treasury)
     return {"fred": fred.fetch, "treasury": treasury.fetch, "nyfed": nyfed.fetch,
             "ecb": ecb.fetch, "snb": snb.fetch, "boj": boj.fetch, "rba": rba.fetch,
-            "mas": mas.fetch, "cboe": cboe.fetch, "cftc": cftc.fetch,
+            "mas": mas.fetch, "cboe": cboe.fetch, "cboe_pc": cboe_pc.fetch, "cftc": cftc.fetch,
             "boc": boc.fetch, "boe": boe.fetch, "bea_release": bea_release.fetch,
             "census": census.fetch, "bea": bea_ita.fetch, "fed_gz": fed_gz.fetch}
 
