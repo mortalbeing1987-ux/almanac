@@ -400,7 +400,7 @@ source = "cboe_pc"
 # ratio) for six Cboe product groups: all products, index options, ETPs, equity
 # options, VIX options, SPX + SPXW. Definition shifts at 2019-10-07 (CSV era is the
 # Cboe Options Exchange file; SPX meant SPX only) -- see almanac/sources/cboe_pc.py.
-# The first delivery catches up over several runs (400 weekdays per call).
+# The first delivery catches up over several runs (200 weekdays per call).
 key = ["TOTAL", "INDEX", "ETP", "EQUITY", "VIX", "SPX"]
 freq = "daily"
 units = "ratio (put volume / call volume)"
