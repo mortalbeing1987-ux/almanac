@@ -369,6 +369,23 @@ redistribution = "restricted"
 backfill = "full"  # VIX from 1990, VVIX from 2006, VIX3M from 2009
 
 [[series]]
+id = "CBOE_INDEX"
+source = "cboe"
+# SKEW (tail-risk index), COR1M / COR3M (implied correlation of the S&P 500
+# members, 1 and 3 months) and DSPX (dispersion). Same CBOE CDN files as
+# VOL_INDEX: COR1M/COR3M carry OHLC (the close is delivered), SKEW/DSPX a
+# single column. Probe 2026-10-01: all four 200, history from SKEW 1990,
+# COR1M/COR3M 2006, DSPX 2014. A separate series (not more VOL_INDEX keys) so
+# the new keys backfill in full without touching VOL_INDEX's state.
+key = ["SKEW", "COR1M", "COR3M", "DSPX"]
+freq = "daily"
+units = "index points (daily close)"
+use = "C"
+status = "active"
+redistribution = "restricted"
+backfill = "full"
+
+[[series]]
 id = "REGIME_FRED"
 source = "fred"
 key = ["T10Y3M", "T10Y2Y", "NFCI", "ICSA"]
