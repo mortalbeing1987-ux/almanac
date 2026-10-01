@@ -32,7 +32,8 @@ from ..registry import delivered_id, keys
 from ._util import get, num, require, rows
 
 JSON_FROM = date(2019, 10, 7)   # first per-day JSON; the history CSVs end 2019-10-04
-MAX_DAYS_PER_RUN = 400          # weekdays fetched per call (about 8 minutes at 1 request/s)
+MAX_DAYS_PER_RUN = 200          # weekdays per call (~4 min at 1 request/s): the collect-dryrun check
+                                # runs two delivery passes inside its 20-minute limit
 BLIND_DAYS = 5                  # this many weekdays in a row without a file = error
 
 # key -> (section in the daily JSON, history CSV)
