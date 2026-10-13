@@ -1,16 +1,28 @@
 """Federal Reserve, Gilchrist-Zakrajsek credit spread and excess bond premium
 (FEDS Notes): one CSV, `date,gz_spread,ebp,est_prob`, one row per month dated
-M/D/YYYY on the first of the month. The whole history comes in every request.
+on the first of the month, M/D/YYYY until 2026 and YYYY-MM-DD since (the Fed
+switched by 2026-10-08; both are accepted). The whole history comes in every request.
 Registry keys map to columns through `columns`; a missing column, a date that
 is not the 1st, or dates out of order is a layout error, never "up to date"."""
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from ..model import Observation
 from ..registry import delivered_id, keys
 from ._util import get, num, require, rows, url_for
+
+
+def _day(s: str) -> date:
+    s = s.strip()
+    if "/" in s:
+        m, d, y = (int(x) for x in s.split("/"))
+        return date(y, m, d)
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", s):
+        return date.fromisoformat(s)
+    raise ValueError(s)
 
 
 def parse(body: bytes, columns: dict[str, str]) -> dict[str, list[tuple[str, float]]]:
@@ -27,10 +39,9 @@ def parse(body: bytes, columns: dict[str, str]) -> dict[str, list[tuple[str, flo
     last = ""
     for r in table[1:]:
         try:
-            m, d, y = (int(x) for x in r[0].strip().split("/"))
-            day = date(y, m, d)
+            day = _day(r[0])
         except ValueError:
-            require(False, f"GZ date {r[0][:12]!r} (M/D/YYYY)")
+            require(False, f"GZ date {r[0][:12]!r} (M/D/YYYY or YYYY-MM-DD)")
         require(day.day == 1, f"GZ date {r[0][:12]!r} is the first of the month")
         iso = day.isoformat()
         require(iso > last, "GZ dates ascending, no duplicates")
