@@ -59,11 +59,19 @@ def test_gz_parse_all_three_keys_first_of_month():
     assert {o.series_id for o in obs} == {"CREDIT_GZ_GZ_SPREAD", "CREDIT_GZ_EBP", "CREDIT_GZ_EST_PROB"}
 
 
+def test_gz_parse_iso_dates():
+    # the Fed switched the file to YYYY-MM-DD by 2026-10-08; old and new spellings both parse
+    body = b"date,gz_spread,ebp,est_prob\n1/1/1973,1,2,3\n1973-02-01,4,5,6\n"
+    got = fed_gz.parse(body, series("CREDIT_GZ")["columns"])
+    assert got["EBP"] == [("1973-01-01", 2.0), ("1973-02-01", 5.0)]
+
+
 @pytest.mark.parametrize("body,match", [
     (b"date,gz_spread,excess_bond_premium,est_prob\n1/1/1973,1,2,3\n", "column 'ebp'"),
     (b"month,gz_spread,ebp,est_prob\n1/1/1973,1,2,3\n", "first column 'date'"),
-    (b"date,gz_spread,ebp,est_prob\n1973-01-01,1,2,3\n", "M/D/YYYY"),
+    (b"date,gz_spread,ebp,est_prob\nJan 1973,1,2,3\n", "M/D/YYYY or YYYY-MM-DD"),
     (b"date,gz_spread,ebp,est_prob\n1/15/1973,1,2,3\n", "first of the month"),
+    (b"date,gz_spread,ebp,est_prob\n1973-01-15,1,2,3\n", "first of the month"),
     (b"date,gz_spread,ebp,est_prob\n2/1/1973,1,2,3\n1/1/1973,1,2,3\n", "ascending"),
     (b"<html>Page not found</html>", "first column 'date'"),
 ])
